@@ -37,8 +37,8 @@ const Header: React.FC<HeaderProps> = ({ cartItemsCount, onCartClick, onMenuClic
               <img src="/logo.jpg" alt="Logo" className="w-12 h-12 rounded-2xl" />
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-noto font-bold text-white tracking-wide">M Bistro Cafe</h1>
-              <p className="text-xs text-brown-300 font-medium tracking-wider">CULINARY EXCELLENCE</p>
+              <h1 className="text-2xl font-noto font-bold text-white tracking-wide">Cresencio Printing</h1>
+              <p className="text-xs text-brown-300 font-medium tracking-wider">PRINTING EXCELLENCE</p>
             </div>
           </button>
           

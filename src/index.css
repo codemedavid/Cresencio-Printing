@@ -1,46 +1,293 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Nom Sum Custom Styles */
-.bg-cream-50 {
-  background-color: #fefce8;
+/* Cresencio Printing and Services - Enhanced Modern Design System */
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #fce7f3 50%, #fef3c7 75%, #f1f5f9 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+    min-height: 100vh;
+  }
+  
+  * {
+    scroll-behavior: smooth;
+  }
+  
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }
 
-.bg-cream-100 {
-  background-color: #fef3c7;
+/* Custom Color Palette */
+@layer utilities {
+  .bg-primary { background-color: #3b82f6; } /* Blue */
+  .bg-secondary { background-color: #fbbf24; } /* Yellow */
+  .bg-accent { background-color: #ec4899; } /* Pink */
+  .bg-neutral { background-color: #ffffff; } /* White */
+  
+  .text-primary { color: #3b82f6; }
+  .text-secondary { color: #fbbf24; }
+  .text-accent { color: #ec4899; }
+  .text-neutral { color: #ffffff; }
+  
+  .border-primary { border-color: #3b82f6; }
+  .border-secondary { border-color: #fbbf24; }
+  .border-accent { border-color: #ec4899; }
+  
+  .hover\:bg-primary:hover { background-color: #2563eb; }
+  .hover\:bg-secondary:hover { background-color: #f59e0b; }
+  .hover\:bg-accent:hover { background-color: #db2777; }
 }
 
-.bg-cream-200 {
-  background-color: #fde68a;
-}
-
-.border-cream-200 {
-  border-color: #fde68a;
-}
-
-.border-cream-300 {
-  border-color: #fcd34d;
-}
-
-.hover\:bg-cream-50:hover {
-  background-color: #fefce8;
-}
-
-.hover\:bg-cream-100:hover {
-  background-color: #fef3c7;
-}
-
-.hover\:bg-cream-200:hover {
-  background-color: #fde68a;
-}
-
-.hover\:border-cream-400:hover {
-  border-color: #fbbf24;
-}
-
-.focus\:ring-cream-500:focus {
-  --tw-ring-color: #f59e0b;
+@layer components {
+  /* Modern Button Styles */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .btn-secondary {
+    @apply bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-8 rounded-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-yellow-500 focus:ring-opacity-20 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .btn-accent {
+    @apply bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 px-8 rounded-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-pink-500 focus:ring-opacity-20 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-semibold py-3 px-8 rounded-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20;
+  }
+  
+  .btn-success {
+    @apply bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-6 rounded-xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-20 shadow-md hover:shadow-lg;
+  }
+  
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-6 rounded-xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-20 shadow-md hover:shadow-lg;
+  }
+  
+  /* Modern Form Input Styles */
+  .form-input {
+    @apply w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 focus:border-blue-500 transition-all duration-300 bg-white bg-opacity-80 backdrop-blur-sm text-gray-700 placeholder-gray-400;
+  }
+  
+  .form-label {
+    @apply block text-sm font-semibold text-gray-700 mb-3 tracking-wide;
+  }
+  
+  .form-error {
+    @apply text-red-500 text-sm mt-2 font-medium;
+  }
+  
+  /* Modern Card Styles */
+  .card {
+    @apply bg-white bg-opacity-90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-white border-opacity-20;
+  }
+  
+  .card-header {
+    @apply border-b border-gray-100 pb-6 mb-8;
+  }
+  
+  .card-modern {
+    @apply bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl p-8 border border-white border-opacity-20 backdrop-blur-sm;
+  }
+  
+  /* Table Styles */
+  .table {
+    @apply w-full border-collapse border border-gray-300;
+  }
+  
+  .table th {
+    @apply bg-gray-50 border border-gray-300 px-4 py-3 text-left font-bold text-gray-700;
+  }
+  
+  .table td {
+    @apply border border-gray-300 px-4 py-3 text-gray-600;
+  }
+  
+  .table tbody tr:hover {
+    @apply bg-blue-50;
+  }
+  
+  .table tbody tr:nth-child(even) {
+    @apply bg-gray-50;
+  }
+  
+  /* Modern File Upload Styles */
+  .file-upload {
+    @apply border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 cursor-pointer bg-white bg-opacity-50 backdrop-blur-sm;
+  }
+  
+  .file-upload.dragover {
+    @apply border-blue-500 bg-blue-100 scale-105;
+  }
+  
+  /* Modern Modal Styles */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50;
+  }
+  
+  .modal-content {
+    @apply bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 p-8 border border-white border-opacity-20 backdrop-blur-sm;
+  }
+  
+  /* Modern Sidebar Styles */
+  .sidebar {
+    @apply fixed left-0 top-0 h-full w-72 bg-gradient-to-b from-blue-600 to-blue-700 text-white transform transition-all duration-300 ease-in-out z-40 shadow-2xl;
+  }
+  
+  .sidebar.closed {
+    @apply -translate-x-full;
+  }
+  
+  .sidebar-item {
+    @apply block w-full text-left px-8 py-4 text-white hover:bg-white hover:bg-opacity-10 transition-all duration-300 rounded-2xl mx-4 my-2 font-medium;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-white bg-opacity-20 shadow-lg;
+  }
+  
+  /* Logo and Branding */
+  .logo {
+    @apply text-2xl font-bold bg-gradient-to-r from-blue-600 via-pink-500 to-yellow-500 bg-clip-text text-transparent;
+  }
+  
+  .logo-icon {
+    @apply w-8 h-8 bg-gradient-to-r from-blue-600 to-pink-500 rounded-xl flex items-center justify-center text-white font-bold;
+  }
+  
+  /* Enhanced Visual Elements */
+  .floating {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .pulse-animation {
+    animation: pulse 2s ease-in-out infinite;
+  }
+  
+  .fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  
+  .slide-in-left {
+    animation: slideInLeft 0.6s ease-out;
+  }
+  
+  .glass-card {
+    @apply bg-white bg-opacity-20 backdrop-blur-lg border border-white border-opacity-30 shadow-2xl;
+  }
+  
+  .gradient-border {
+    @apply relative;
+  }
+  
+  .gradient-border::before {
+    content: '';
+    @apply absolute inset-0 rounded-2xl p-[2px] bg-gradient-to-r from-blue-600 via-pink-500 to-yellow-500;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+  
+  .text-gradient {
+    @apply bg-gradient-to-r from-blue-600 via-pink-500 to-yellow-500 bg-clip-text text-transparent;
+  }
+  
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl;
+  }
+  
+  .decorative-circle {
+    @apply absolute w-32 h-32 rounded-full opacity-10 blur-xl;
+  }
+  
+  .decorative-circle-1 {
+    @apply bg-blue-500 top-10 left-10;
+  }
+  
+  .decorative-circle-2 {
+    @apply bg-pink-500 top-20 right-20;
+  }
+  
+  .decorative-circle-3 {
+    @apply bg-yellow-500 bottom-20 left-1/4;
+  }
+  
+  /* Enhanced Visual Effects */
+  .glow-effect {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  
+  .glow-effect-pink {
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.3);
+  }
+  
+  .glow-effect-yellow {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+  }
+  
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .backdrop-blur-strong {
+    backdrop-filter: blur(20px);
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #3b82f6, #ec4899);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(to bottom, #2563eb, #db2777);
+  }
 }
 
 /* Hide scrollbar for mobile nav */
@@ -59,12 +306,80 @@ img {
   image-rendering: crisp-edges;
 }
 
-/* Preload critical images */
-.preload-image {
-  content: '';
-  position: absolute;
-  left: -9999px;
-  top: -9999px;
-  width: 1px;
-  height: 1px;
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .btn-primary, .btn-secondary {
+    @apply py-2 px-4 text-sm;
+  }
+  
+  .form-input {
+    @apply py-2 px-3 text-sm;
+  }
+  
+  .card {
+    @apply p-4;
+  }
+  
+  .table {
+    @apply text-sm;
+  }
+  
+  .table th, .table td {
+    @apply px-2 py-2;
+  }
+  
+  /* Mobile-specific improvements */
+  .hero-title {
+    @apply text-3xl md:text-6xl;
+  }
+  
+  .hero-subtitle {
+    @apply text-lg md:text-xl;
+  }
+  
+  .mobile-stack {
+    @apply flex-col space-y-2;
+  }
+  
+  .mobile-full {
+    @apply w-full;
+  }
+  
+  /* Sidebar mobile behavior */
+  .sidebar {
+    @apply w-full;
+  }
+  
+  /* File upload mobile */
+  .file-upload {
+    @apply p-4;
+  }
+  
+  /* Modal mobile */
+  .modal-content {
+    @apply mx-2 max-w-full;
+  }
+}
+
+/* Extra small screens (320px) */
+@media (max-width: 320px) {
+  .btn-primary, .btn-secondary {
+    @apply py-1 px-2 text-xs;
+  }
+  
+  .form-input {
+    @apply py-1 px-2 text-xs;
+  }
+  
+  .card {
+    @apply p-2;
+  }
+  
+  .hero-title {
+    @apply text-2xl;
+  }
+  
+  .hero-subtitle {
+    @apply text-base;
+  }
 }

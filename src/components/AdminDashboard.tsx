@@ -1,962 +1,459 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Save, X, ArrowLeft, Coffee, TrendingUp, Package, Users, Lock, FolderOpen, CreditCard } from 'lucide-react';
-import { MenuItem, Variation, AddOn } from '../types';
-import { addOnCategories } from '../data/menuData';
-import { useMenu } from '../hooks/useMenu';
-import { useCategories, Category } from '../hooks/useCategories';
-import ImageUpload from './ImageUpload';
-import CategoryManager from './CategoryManager';
-import PaymentMethodManager from './PaymentMethodManager';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { VipMember, JobOrder, MemberStatus, OrderStatus } from '../types';
+import Logo from './Logo';
+import { Users, FileText, Search, CheckCircle, XCircle, Eye, Edit, Trash2, Plus, Menu, X, Filter, Download, RefreshCw } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('beracah_admin_auth') === 'true';
-  });
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const { menuItems, loading, addMenuItem, updateMenuItem, deleteMenuItem } = useMenu();
-  const { categories } = useCategories();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'items' | 'add' | 'edit' | 'categories' | 'payments'>('dashboard');
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [showBulkActions, setShowBulkActions] = useState(false);
-  const [formData, setFormData] = useState<Partial<MenuItem>>({
-    name: '',
-    description: '',
-    basePrice: 0,
-    category: 'hot-coffee',
-    popular: false,
-    available: true,
-    variations: [],
-    addOns: []
-  });
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'registrations' | 'orders'>('registrations');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState<JobOrder | null>(null);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  
+  // Mock data - in real app, this would come from API
+  const [registrations, setRegistrations] = useState<VipMember[]>([
+    {
+      id: 1,
+      unique_id: 'VIP-123456',
+      full_name: 'John Doe',
+      address: '123 Main St, City, State',
+      email: 'john.doe@example.com',
+      mobile_number: '+1234567890',
+      customer_category: 'Regular Customer',
+      status: 'pending',
+      created_at: '2024-01-10T09:00:00Z',
+      updated_at: '2024-01-10T09:00:00Z',
+    },
+    {
+      id: 2,
+      unique_id: 'VIP-789012',
+      full_name: 'Jane Smith',
+      address: '456 Oak St, City, State',
+      email: 'jane.smith@example.com',
+      mobile_number: '+1234567891',
+      customer_category: 'Student',
+      school_name: 'University of Example',
+      status: 'approved',
+      created_at: '2024-01-11T10:30:00Z',
+      updated_at: '2024-01-11T10:30:00Z',
+    },
+    {
+      id: 3,
+      unique_id: 'VIP-345678',
+      full_name: 'Bob Johnson',
+      address: '789 Pine St, City, State',
+      email: 'bob.johnson@example.com',
+      mobile_number: '+1234567892',
+      customer_category: 'Senior Citizen',
+      senior_id_number: 'SC-12345',
+      status: 'rejected',
+      created_at: '2024-01-12T14:15:00Z',
+      updated_at: '2024-01-12T14:15:00Z',
+    },
+  ]);
 
-  const handleAddItem = () => {
-    setCurrentView('add');
-    const defaultCategory = categories.length > 0 ? categories[0].id : 'dim-sum';
-    setFormData({
-      name: '',
-      description: '',
-      basePrice: 0,
-      category: defaultCategory,
-      popular: false,
-      available: true,
-      variations: [],
-      addOns: []
-    });
-  };
+  const [orders, setOrders] = useState<JobOrder[]>([
+    {
+      id: 1,
+      job_order_number: 'JO-2024001',
+      vip_member_id: 1,
+      delivery_type: 'pickup',
+      pickup_schedule: '2024-01-15T10:00:00Z',
+      paper_sizes: ['A4'],
+      number_of_copies: 50,
+      instructions: 'Black and white, double-sided',
+      status: 'completed',
+      created_at: '2024-01-10T09:00:00Z',
+      updated_at: '2024-01-15T10:30:00Z',
+      vip_member: registrations[0],
+    },
+    {
+      id: 2,
+      job_order_number: 'JO-2024002',
+      vip_member_id: 2,
+      delivery_type: 'delivery',
+      receiver_name: 'Jane Smith',
+      receiver_address: '456 Oak St, City, State',
+      receiver_mobile: '+1234567891',
+      paper_sizes: ['Letter', 'Legal'],
+      number_of_copies: 25,
+      instructions: 'Color printing, single-sided',
+      status: 'in_progress',
+      created_at: '2024-01-12T14:30:00Z',
+      updated_at: '2024-01-12T14:30:00Z',
+      vip_member: registrations[1],
+    },
+    {
+      id: 3,
+      job_order_number: 'JO-2024003',
+      vip_member_id: 1,
+      delivery_type: 'pickup',
+      paper_sizes: ['A4'],
+      number_of_copies: 100,
+      instructions: 'Binding required',
+      status: 'pending',
+      created_at: '2024-01-14T16:45:00Z',
+      updated_at: '2024-01-14T16:45:00Z',
+      vip_member: registrations[0],
+    },
+  ]);
 
-  const handleEditItem = (item: MenuItem) => {
-    setEditingItem(item);
-    setFormData(item);
-    setCurrentView('edit');
-  };
-
-  const handleDeleteItem = async (id: string) => {
-    if (confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
-      try {
-        setIsProcessing(true);
-        await deleteMenuItem(id);
-      } catch (error) {
-        alert('Failed to delete item. Please try again.');
-      } finally {
-        setIsProcessing(false);
-      }
-    }
-  };
-
-  const handleSaveItem = async () => {
-    if (!formData.name || !formData.description || !formData.basePrice) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      if (editingItem) {
-        await updateMenuItem(editingItem.id, formData);
+  const handleStatusChange = (id: number, newStatus: MemberStatus | OrderStatus) => {
+    if (activeTab === 'registrations') {
+      setRegistrations(prev => 
+        prev.map(reg => reg.id === id ? { ...reg, status: newStatus as MemberStatus } : reg)
+      );
       } else {
-        await addMenuItem(formData as Omit<MenuItem, 'id'>);
-      }
-      setCurrentView('items');
-      setEditingItem(null);
-    } catch (error) {
-      alert('Failed to save item');
+      setOrders(prev => 
+        prev.map(order => order.id === id ? { ...order, status: newStatus as OrderStatus } : order)
+      );
     }
   };
 
-  const handleCancel = () => {
-    setCurrentView(currentView === 'add' || currentView === 'edit' ? 'items' : 'dashboard');
-    setEditingItem(null);
-    setSelectedItems([]);
-  };
+  const filteredRegistrations = registrations.filter(reg =>
+    reg.unique_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    reg.full_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const handleBulkRemove = async () => {
-    if (selectedItems.length === 0) {
-      alert('Please select items to delete');
-      return;
-    }
+  const filteredOrders = orders.filter(order =>
+    order.job_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.vip_member?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.status.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-    const itemNames = selectedItems.map(id => {
-      const item = menuItems.find(i => i.id === id);
-      return item ? item.name : 'Unknown Item';
-    }).slice(0, 5); // Show first 5 items
-    
-    const displayNames = itemNames.join(', ');
-    const moreItems = selectedItems.length > 5 ? ` and ${selectedItems.length - 5} more items` : '';
-    
-    if (confirm(`Are you sure you want to delete ${selectedItems.length} item(s)?\n\nItems to delete: ${displayNames}${moreItems}\n\nThis action cannot be undone.`)) {
-      try {
-        setIsProcessing(true);
-        // Delete items one by one
-        for (const itemId of selectedItems) {
-          await deleteMenuItem(itemId);
-        }
-        setSelectedItems([]);
-        setShowBulkActions(false);
-        alert(`Successfully deleted ${selectedItems.length} item(s).`);
-      } catch (error) {
-        alert('Failed to delete some items. Please try again.');
-      } finally {
-        setIsProcessing(false);
-      }
-    }
-  };
-  const handleBulkCategoryChange = async (newCategoryId: string) => {
-    if (selectedItems.length === 0) {
-      alert('Please select items to update');
-      return;
-    }
-
-    const categoryName = categories.find(cat => cat.id === newCategoryId)?.name;
-    if (confirm(`Are you sure you want to change the category of ${selectedItems.length} item(s) to "${categoryName}"?`)) {
-      try {
-        setIsProcessing(true);
-        // Update category for each selected item
-        for (const itemId of selectedItems) {
-          const item = menuItems.find(i => i.id === itemId);
-          if (item) {
-            await updateMenuItem(itemId, { ...item, category: newCategoryId });
-          }
-        }
-        setSelectedItems([]);
-        setShowBulkActions(false);
-        alert(`Successfully updated category for ${selectedItems.length} item(s)`);
-      } catch (error) {
-        alert('Failed to update some items');
-      } finally {
-        setIsProcessing(false);
-      }
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+      case 'completed':
+        return 'text-green-600 bg-green-100';
+      case 'pending':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'rejected':
+        return 'text-red-600 bg-red-100';
+      case 'in_progress':
+        return 'text-blue-600 bg-blue-100';
+      case 'ready':
+        return 'text-purple-600 bg-purple-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
     }
   };
 
-  const handleSelectItem = (itemId: string) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
-        ? prev.filter(id => id !== itemId)
-        : [...prev, itemId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedItems.length === menuItems.length) {
-      setSelectedItems([]);
-      setShowBulkActions(false);
-    } else {
-      setSelectedItems(menuItems.map(item => item.id));
-      setShowBulkActions(true);
-    }
-  };
-
-  // Update bulk actions visibility when selection changes
-  React.useEffect(() => {
-    setShowBulkActions(selectedItems.length > 0);
-  }, [selectedItems]);
-
-  const addVariation = () => {
-    const newVariation: Variation = {
-      id: `var-${Date.now()}`,
-      name: '',
-      price: 0
-    };
-    setFormData({
-      ...formData,
-      variations: [...(formData.variations || []), newVariation]
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  const updateVariation = (index: number, field: keyof Variation, value: string | number) => {
-    const updatedVariations = [...(formData.variations || [])];
-    updatedVariations[index] = { ...updatedVariations[index], [field]: value };
-    setFormData({ ...formData, variations: updatedVariations });
+  const handleOrderClick = (order: JobOrder) => {
+    setSelectedOrder(order);
+    setShowOrderModal(true);
   };
 
-  const removeVariation = (index: number) => {
-    const updatedVariations = formData.variations?.filter((_, i) => i !== index) || [];
-    setFormData({ ...formData, variations: updatedVariations });
-  };
-
-  const addAddOn = () => {
-    const newAddOn: AddOn = {
-      id: `addon-${Date.now()}`,
-      name: '',
-      price: 0,
-      category: 'extras'
-    };
-    setFormData({
-      ...formData,
-      addOns: [...(formData.addOns || []), newAddOn]
-    });
-  };
-
-  const updateAddOn = (index: number, field: keyof AddOn, value: string | number) => {
-    const updatedAddOns = [...(formData.addOns || [])];
-    updatedAddOns[index] = { ...updatedAddOns[index], [field]: value };
-    setFormData({ ...formData, addOns: updatedAddOns });
-  };
-
-  const removeAddOn = (index: number) => {
-    const updatedAddOns = formData.addOns?.filter((_, i) => i !== index) || [];
-    setFormData({ ...formData, addOns: updatedAddOns });
-  };
-
-  // Dashboard Stats
-  const totalItems = menuItems.length;
-  const popularItems = menuItems.filter(item => item.popular).length;
-  const availableItems = menuItems.filter(item => item.available).length;
-  const categoryCounts = categories.map(cat => ({
-    ...cat,
-    count: menuItems.filter(item => item.category === cat.id).length
-  }));
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === 'NomSum@Admin!2025') {
-      setIsAuthenticated(true);
-      localStorage.setItem('beracah_admin_auth', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('Invalid password');
-    }
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('beracah_admin_auth');
-    setPassword('');
-    setCurrentView('dashboard');
-  };
-
-  // Login Screen
-  if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mb-4">
-              <Lock className="h-8 w-8 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-pink-50">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-md shadow-lg border-b border-white/20 sticky top-0 z-30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-20">
+            <div className="flex items-center">
+                <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="md:hidden text-gray-600 hover:text-primary mr-4 transition-colors duration-300"
+                >
+                <Menu className="w-6 h-6" />
+                </button>
+              <Link to="/" className="flex items-center space-x-3">
+                <Logo size="md" />
+                <span className="text-gray-700 font-semibold">Admin</span>
+              </Link>
+              </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-600 font-medium">Admin Dashboard</span>
+                <button
+                onClick={() => navigate('/')}
+                className="text-gray-600 hover:text-primary transition-colors duration-300 font-medium"
+              >
+                Logout
+                </button>
             </div>
-            <h1 className="text-2xl font-playfair font-semibold text-black">Admin Access</h1>
-            <p className="text-gray-600 mt-2">Enter password to access the admin dashboard</p>
           </div>
-          
-          <form onSubmit={handleLogin}>
+        </div>
+      </header>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <div className={`sidebar ${sidebarOpen ? '' : 'closed'} md:translate-x-0`}>
+          <div className="p-8">
+            <div className="mb-8">
+              <Logo size="md" showText={false} />
+              <h2 className="text-lg font-bold text-white mt-4">Admin Panel</h2>
+            </div>
+            <nav className="space-y-2">
+              <button
+                onClick={() => setActiveTab('registrations')}
+                className={`sidebar-item ${activeTab === 'registrations' ? 'active' : ''}`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Users className="w-5 h-5" />
+                  <span>Registrations</span>
+            </div>
+                </button>
+                  <button
+                onClick={() => setActiveTab('orders')}
+                className={`sidebar-item ${activeTab === 'orders' ? 'active' : ''}`}
+              >
+                <div className="flex items-center space-x-3">
+                  <FileText className="w-5 h-5" />
+                  <span>Orders</span>
+                </div>
+              </button>
+            </nav>
+            </div>
+              </div>
+
+        {/* Main Content */}
+        <div className="flex-1 md:ml-64">
+          <div className="p-6">
+            {/* Search and Filters */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-black mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                placeholder="Enter admin password"
-                required
-              />
-              {loginError && (
-                <p className="text-red-500 text-sm mt-2">{loginError}</p>
-              )}
-            </div>
-            
-            <button
-              type="submit"
-              className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors duration-200 font-medium"
-            >
-              Access Dashboard
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Form View (Add/Edit)
-  if (currentView === 'add' || currentView === 'edit') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={handleCancel}
-                  className="flex items-center space-x-2 text-gray-600 hover:text-black transition-colors duration-200"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  <span>Back</span>
-                </button>
-                <h1 className="text-2xl font-playfair font-semibold text-black">
-                  {currentView === 'add' ? 'Add New Item' : 'Edit Item'}
-                </h1>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center space-x-2"
-                >
-                  <X className="h-4 w-4" />
-                  <span>Cancel</span>
-                </button>
-                <button
-                  onClick={handleSaveItem}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center space-x-2"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>Save</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="bg-white rounded-xl shadow-sm p-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <div>
-                <label className="block text-sm font-medium text-black mb-2">Item Name *</label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                  placeholder="Enter item name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-black mb-2">Base Price *</label>
-                <input
-                  type="number"
-                  value={formData.basePrice || ''}
-                  onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-black mb-2">Category *</label>
-                <select
-                  value={formData.category || ''}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                >
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.popular || false}
-                    onChange={(e) => setFormData({ ...formData, popular: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm font-medium text-black">Mark as Popular</span>
-                </label>
-              </div>
-
-              <div className="flex items-center">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.available ?? true}
-                    onChange={(e) => setFormData({ ...formData, available: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm font-medium text-black">Available for Order</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <label className="block text-sm font-medium text-black mb-2">Description *</label>
-              <textarea
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="Enter item description"
-                rows={3}
-              />
-            </div>
-
-            <div className="mb-8">
-              <ImageUpload
-                currentImage={formData.image}
-                onImageChange={(imageUrl) => setFormData({ ...formData, image: imageUrl })}
-              />
-            </div>
-
-            {/* Variations Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-playfair font-medium text-black">Size Variations</h3>
-                <button
-                  onClick={addVariation}
-                  className="flex items-center space-x-2 px-3 py-2 bg-cream-100 text-black rounded-lg hover:bg-cream-200 transition-colors duration-200"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Variation</span>
-                </button>
-              </div>
-
-              {formData.variations?.map((variation, index) => (
-                <div key={variation.id} className="flex items-center space-x-3 mb-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    value={variation.name}
-                    onChange={(e) => updateVariation(index, 'name', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Variation name (e.g., Small, Medium, Large)"
+                    placeholder={`Search ${activeTab}...`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="form-input pl-10"
                   />
-                  <input
-                    type="number"
-                    value={variation.price}
-                    onChange={(e) => updateVariation(index, 'price', Number(e.target.value))}
-                    className="w-24 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Price"
-                  />
-                  <button
-                    onClick={() => removeVariation(index)}
-                    className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
                 </div>
-              ))}
-            </div>
-
-            {/* Add-ons Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-playfair font-medium text-black">Add-ons</h3>
-                <button
-                  onClick={addAddOn}
-                  className="flex items-center space-x-2 px-3 py-2 bg-cream-100 text-black rounded-lg hover:bg-cream-200 transition-colors duration-200"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Add-on</span>
-                </button>
-              </div>
-
-              {formData.addOns?.map((addOn, index) => (
-                <div key={addOn.id} className="flex items-center space-x-3 mb-3 p-4 bg-gray-50 rounded-lg">
-                  <input
-                    type="text"
-                    value={addOn.name}
-                    onChange={(e) => updateAddOn(index, 'name', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Add-on name"
-                  />
-                  <select
-                    value={addOn.category}
-                    onChange={(e) => updateAddOn(index, 'category', e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  >
-                    {addOnCategories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    value={addOn.price}
-                    onChange={(e) => updateAddOn(index, 'price', Number(e.target.value))}
-                    className="w-24 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Price"
-                  />
-                  <button
-                    onClick={() => removeAddOn(index)}
-                    className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                  >
-                    <Trash2 className="h-4 w-4" />
+                <div className="flex gap-2">
+                  <button className="btn-secondary flex items-center">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
                   </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Items List View
-  if (currentView === 'items') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className="flex items-center space-x-2 text-gray-600 hover:text-black transition-colors duration-200"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  <span>Dashboard</span>
-                </button>
-                <h1 className="text-2xl font-playfair font-semibold text-black">Menu Items</h1>
-              </div>
-              <div className="flex items-center space-x-3">
-                {showBulkActions && (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">
-                      {selectedItems.length} item(s) selected
-                    </span>
-                    <button
-                      onClick={() => setShowBulkActions(!showBulkActions)}
-                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                    >
-                      <span>Bulk Actions</span>
-                    </button>
-                  </div>
-                )}
-                <button
-                  onClick={handleAddItem}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add New Item</span>
-                </button>
-              </div>
+                  <button className="btn-primary flex items-center">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </button>
             </div>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Bulk Actions Panel */}
-          {showBulkActions && selectedItems.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border-l-4 border-blue-500">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-medium text-black mb-1">Bulk Actions</h3>
-                  <p className="text-sm text-gray-600">{selectedItems.length} item(s) selected</p>
+            {/* Registrations Tab */}
+            {activeTab === 'registrations' && (
+              <div className="card">
+                <div className="card-header">
+                  <h2 className="text-xl font-bold text-gray-900">VIP Registrations</h2>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {/* Change Category */}
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sm font-medium text-gray-700">Change Category:</label>
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleBulkCategoryChange(e.target.value);
-                          e.target.value = ''; // Reset selection
-                        }
-                      }}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      disabled={isProcessing}
-                    >
-                      <option value="">Select Category</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {/* Remove Items */}
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>VIP ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Email</th>
+                        <th>Mobile</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRegistrations.map((reg) => (
+                        <tr key={reg.id}>
+                          <td className="font-medium text-blue-600">{reg.unique_id}</td>
+                          <td>{reg.full_name}</td>
+                          <td className="capitalize">{reg.customer_category}</td>
+                          <td>{reg.email}</td>
+                          <td>{reg.mobile_number}</td>
+                          <td>
+                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(reg.status)}`}>
+                              {reg.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="flex gap-2">
+                              {reg.status === 'pending' && (
+                                <>
                   <button
-                    onClick={handleBulkRemove}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                                    onClick={() => handleStatusChange(reg.id, 'approved')}
+                                    className="btn-success text-xs flex items-center"
                   >
-                    <Trash2 className="h-4 w-4" />
-                    <span>{isProcessing ? 'Removing...' : 'Remove Selected'}</span>
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Approve
                   </button>
-                  
-                  {/* Clear Selection */}
                   <button
-                    onClick={() => {
-                      setSelectedItems([]);
-                      setShowBulkActions(false);
-                    }}
-                    className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors duration-200 text-sm"
-                  >
-                    <X className="h-4 w-4" />
-                    <span>Clear Selection</span>
+                                    onClick={() => handleStatusChange(reg.id, 'rejected')}
+                                    className="btn-danger text-xs flex items-center"
+                                  >
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Reject
                   </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            {/* Bulk Actions Bar */}
-            {menuItems.length > 0 && (
-              <div className="bg-gray-50 border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.length === menuItems.length && menuItems.length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        Select All ({menuItems.length} items)
-                      </span>
-                    </label>
-                  </div>
-                  {selectedItems.length > 0 && (
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">
-                        {selectedItems.length} item(s) selected
-                      </span>
-                      <button
-                        onClick={() => setSelectedItems([])}
-                        className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200"
-                      >
-                        Clear Selection
+                                </>
+                              )}
+                              <button className="btn-secondary text-xs flex items-center">
+                                <Eye className="w-3 h-3 mr-1" />
+                                View
                       </button>
                     </div>
-                  )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">
-                      Select
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Name</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Category</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Base Price</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Variations</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Add-ons</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Status</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-900">Actions</th>
+            {/* Orders Tab */}
+            {activeTab === 'orders' && (
+              <div className="card">
+                <div className="card-header">
+                  <h2 className="text-xl font-bold text-gray-900">Job Orders</h2>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Order #</th>
+                        <th>Customer</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Type</th>
+                        <th>Details</th>
+                        <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {menuItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.includes(item.id)}
-                          onChange={() => handleSelectItem(item.id)}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-medium text-gray-900">{item.name}</div>
-                          <div className="text-sm text-gray-500 truncate max-w-xs">{item.description}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {categories.find(cat => cat.id === item.category)?.name}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">₱{item.basePrice}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {item.variations?.length || 0} variations
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {item.addOns?.length || 0} add-ons
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col space-y-1">
-                          {item.popular && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
-                              Popular
+                    <tbody>
+                      {filteredOrders.map((order) => (
+                        <tr key={order.id} className="cursor-pointer hover:bg-blue-50" onClick={() => handleOrderClick(order)}>
+                          <td className="font-medium text-blue-600">{order.job_order_number}</td>
+                          <td>{order.vip_member?.full_name}</td>
+                          <td>{formatDate(order.created_at)}</td>
+                          <td>
+                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(order.status)}`}>
+                              {order.status.replace('_', ' ').toUpperCase()}
                             </span>
-                          )}
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            item.available 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {item.available ? 'Available' : 'Unavailable'}
-                          </span>
+                          </td>
+                          <td className="capitalize">{order.delivery_type}</td>
+                          <td>
+                            <div className="text-sm">
+                              <p><strong>Copies:</strong> {order.number_of_copies}</p>
+                              <p><strong>Sizes:</strong> {order.paper_sizes.join(', ')}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleEditItem(item)}
-                            disabled={isProcessing}
-                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors duration-200"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            disabled={isProcessing}
-                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <td>
+                            <div className="flex gap-2">
+                              <select
+                                value={order.status}
+                                onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)}
+                                className="text-xs border border-gray-300 rounded px-2 py-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="ready">Ready</option>
+                                <option value="completed">Completed</option>
+                              </select>
+                              <button className="btn-secondary text-xs flex items-center">
+                                <FileText className="w-3 h-3 mr-1" />
+                                Files
+                              </button>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-
-            {/* Mobile Card View */}
-            <div className="md:hidden">
-              {menuItems.map((item) => (
-                <div key={item.id} className={`p-4 border-b border-gray-200 last:border-b-0 ${selectedItems.includes(item.id) ? 'bg-blue-50' : ''}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.includes(item.id)}
-                        onChange={() => handleSelectItem(item.id)}
-                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                      />
-                      <span className="text-sm text-gray-600">Select</span>
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleEditItem(item)}
-                        disabled={isProcessing}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors duration-200"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        disabled={isProcessing}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate">{item.name}</h3>
-                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{item.description}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-500">Category:</span>
-                      <span className="ml-1 text-gray-900">
-                        {categories.find(cat => cat.id === item.category)?.name}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Price:</span>
-                      <span className="ml-1 font-medium text-gray-900">₱{item.basePrice}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Variations:</span>
-                      <span className="ml-1 text-gray-900">{item.variations?.length || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Add-ons:</span>
-                      <span className="ml-1 text-gray-900">{item.addOns?.length || 0}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center space-x-2">
-                      {item.popular && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
-                          Popular
-                        </span>
-                      )}
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        item.available 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {item.available ? 'Available' : 'Unavailable'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Categories View
-  if (currentView === 'categories') {
-    return <CategoryManager onBack={() => setCurrentView('dashboard')} />;
-  }
-
-  // Payment Methods View
-  if (currentView === 'payments') {
-    return <PaymentMethodManager onBack={() => setCurrentView('dashboard')} />;
-  }
-
-  // Dashboard View
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Coffee className="h-8 w-8 text-black" />
-              <h1 className="text-2xl font-noto font-semibold text-black">Nom Sum Admin</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <a
-                href="/"
-                className="text-gray-600 hover:text-black transition-colors duration-200"
-              >
-                View Website
-              </a>
-              <button
-                onClick={handleLogout}
-                className="text-gray-600 hover:text-black transition-colors duration-200"
-              >
-                Logout
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-600 rounded-lg">
-                <Package className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Items</p>
-                <p className="text-2xl font-semibold text-gray-900">{totalItems}</p>
-              </div>
+      {/* Order Details Modal */}
+      {showOrderModal && selectedOrder && (
+        <div className="modal-overlay" onClick={() => setShowOrderModal(false)}>
+          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Order Details</h2>
+              <button
+                onClick={() => setShowOrderModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Order Number:</span>
+                  <p className="text-gray-900">{selectedOrder.job_order_number}</p>
           </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-500 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Available Items</p>
-                <p className="text-2xl font-semibold text-gray-900">{availableItems}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-cream-500 rounded-lg">
-                <Coffee className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Popular Items</p>
-                <p className="text-2xl font-semibold text-gray-900">{popularItems}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-500 rounded-lg">
-                <Users className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active</p>
-                <p className="text-2xl font-semibold text-gray-900">Online</p>
-              </div>
-            </div>
-          </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Status:</span>
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedOrder.status)}`}>
+                    {selectedOrder.status.replace('_', ' ').toUpperCase()}
+                  </span>
         </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-playfair font-medium text-black mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button
-                onClick={handleAddItem}
-                className="w-full flex items-center space-x-3 p-3 text-left hover:bg-gray-50 rounded-lg transition-colors duration-200"
-              >
-                <Plus className="h-5 w-5 text-gray-400" />
-                <span className="font-medium text-gray-900">Add New Menu Item</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('items')}
-                className="w-full flex items-center space-x-3 p-3 text-left hover:bg-gray-50 rounded-lg transition-colors duration-200"
-              >
-                <Package className="h-5 w-5 text-gray-400" />
-                <span className="font-medium text-gray-900">Manage Menu Items</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('categories')}
-                className="w-full flex items-center space-x-3 p-3 text-left hover:bg-gray-50 rounded-lg transition-colors duration-200"
-              >
-                <FolderOpen className="h-5 w-5 text-gray-400" />
-                <span className="font-medium text-gray-900">Manage Categories</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('payments')}
-                className="w-full flex items-center space-x-3 p-3 text-left hover:bg-gray-50 rounded-lg transition-colors duration-200"
-              >
-                <CreditCard className="h-5 w-5 text-gray-400" />
-                <span className="font-medium text-gray-900">Payment Methods</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-playfair font-medium text-black mb-4">Categories Overview</h3>
-            <div className="space-y-3">
-              {categoryCounts.map((category) => (
-                <div key={category.id} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg">{category.icon}</span>
-                    <span className="font-medium text-gray-900">{category.name}</span>
-                  </div>
-                  <span className="text-sm text-gray-500">{category.count} items</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Customer:</span>
+                  <p className="text-gray-900">{selectedOrder.vip_member?.full_name}</p>
       </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Delivery Type:</span>
+                  <p className="text-gray-900 capitalize">{selectedOrder.delivery_type}</p>
+              </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Paper Sizes:</span>
+                  <p className="text-gray-900">{selectedOrder.paper_sizes.join(', ')}</p>
+              </div>
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Copies:</span>
+                  <p className="text-gray-900">{selectedOrder.number_of_copies}</p>
+          </div>
+              </div>
+              
+              {selectedOrder.instructions && (
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Instructions:</span>
+                  <p className="text-gray-900">{selectedOrder.instructions}</p>
+              </div>
+              )}
+              
+              {selectedOrder.delivery_type === 'delivery' && (
+                <div>
+                  <span className="text-sm font-bold text-gray-500">Delivery Details:</span>
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                    <p><strong>Receiver:</strong> {selectedOrder.receiver_name}</p>
+                    <p><strong>Address:</strong> {selectedOrder.receiver_address}</p>
+                    <p><strong>Mobile:</strong> {selectedOrder.receiver_mobile}</p>
+              </div>
+            </div>
+              )}
+              
+              <div className="flex gap-2 pt-4">
+                <button className="btn-primary">Download Files</button>
+                <button className="btn-secondary">Print Order</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useVip } from '../contexts/VipContext';
+import { useJobOrders } from '../hooks/useJobOrders';
 import { JobOrderForm, PaperSize } from '../types';
 import Logo from './Logo';
-import { FileText, Upload, Plus, Minus, CheckCircle, ArrowLeft, ArrowRight, Printer, Package, Truck, User, Calendar, Copy } from 'lucide-react';
+import { FileText, Upload, CheckCircle, ArrowLeft, Printer, Package, Truck, User, Calendar, Copy, X } from 'lucide-react';
 
 const JobOrderCreation: React.FC = () => {
   const navigate = useNavigate();
   const { currentVip, paperSizes, setPaperSizes } = useVip();
+  const { createOrder } = useJobOrders();
   const [formData, setFormData] = useState<JobOrderForm>({
     delivery_type: 'pickup',
     paper_sizes: [],
     number_of_copies: 1,
     files: [],
   });
-  const [errors, setErrors] = useState<Partial<JobOrderForm>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [generatedOrderNumber, setGeneratedOrderNumber] = useState('');
@@ -45,6 +47,9 @@ const JobOrderCreation: React.FC = () => {
         ...prev,
         [name]: parseInt(value) || 0
       }));
+    } else if (name === 'paper_sizes') {
+      // Handle paper sizes separately
+      return;
     } else {
       setFormData(prev => ({
         ...prev,
@@ -53,11 +58,12 @@ const JobOrderCreation: React.FC = () => {
     }
 
     // Clear error when user starts typing
-    if (errors[name as keyof JobOrderForm]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: undefined
-      }));
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
     }
   };
 
@@ -72,10 +78,38 @@ const JobOrderCreation: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setFormData(prev => ({
-      ...prev,
-      files: [...prev.files, ...files]
-    }));
+    console.log('Files selected:', files);
+    
+    // Validate file types and sizes
+    const validFiles = files.filter(file => {
+      const validTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      const isValidType = validTypes.includes(fileExtension);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
+      
+      if (!isValidType) {
+        alert(`File ${file.name} is not a supported format. Please upload PDF, DOC, DOCX, JPG, or PNG files.`);
+        return false;
+      }
+      
+      if (!isValidSize) {
+        alert(`File ${file.name} is too large. Please upload files smaller than 10MB.`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    if (validFiles.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        files: [...prev.files, ...validFiles]
+      }));
+      console.log('Valid files added:', validFiles);
+    }
+    
+    // Clear the input so the same file can be selected again
+    e.target.value = '';
   };
 
   const removeFile = (index: number) => {
@@ -86,7 +120,7 @@ const JobOrderCreation: React.FC = () => {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<JobOrderForm> = {};
+    const newErrors: Record<string, string> = {};
 
     if (formData.paper_sizes.length === 0) {
       newErrors.paper_sizes = 'Please select at least one paper size';
@@ -119,26 +153,28 @@ const JobOrderCreation: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || !currentVip) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
+      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Generate order number
-      const orderNumber = `JO-${Date.now().toString().slice(-6)}`;
-      setGeneratedOrderNumber(orderNumber);
+      // Create the order using the hook
+      const newOrder = createOrder(formData, currentVip);
+      
+      // Set the generated order number for display
+      setGeneratedOrderNumber(newOrder.job_order_number);
       setShowSuccessModal(true);
       
-      // In a real app, you would save to database here
-      console.log('Order data:', formData);
+      console.log('Order created successfully:', newOrder);
       
     } catch (error) {
       console.error('Order submission error:', error);
+      alert('Failed to submit order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -351,19 +387,23 @@ const JobOrderCreation: React.FC = () => {
               {/* File List */}
               {formData.files.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-bold text-gray-700 mb-2">Uploaded Files:</h4>
+                  <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                    Uploaded Files ({formData.files.length}):
+                  </h4>
                   <div className="space-y-2">
                     {formData.files.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                      <div key={index} className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
                         <div className="flex items-center space-x-2">
-                          <FileText className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-700">{file.name}</span>
+                          <FileText className="w-4 h-4 text-green-600" />
+                          <span className="text-sm text-gray-700 font-medium">{file.name}</span>
                           <span className="text-xs text-gray-500">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeFile(index)}
-                          className="text-red-600 hover:text-red-800"
+                          className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                          title="Remove file"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -373,6 +413,11 @@ const JobOrderCreation: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* File Upload Validation Error */}
+            {formData.files.length === 0 && (
+              <p className="form-error text-center">Please upload at least one file to submit your order</p>
+            )}
 
             <button
               type="submit"
@@ -450,11 +495,21 @@ const FileUpload: React.FC<FileUploadProps> = ({ onChange, accept = "*" }) => {
     setIsDragOver(false);
     
     const files = e.dataTransfer.files;
+    console.log('Files dropped:', files);
+    
     if (files.length > 0) {
       const fakeEvent = {
         target: { files }
       } as React.ChangeEvent<HTMLInputElement>;
       onChange(fakeEvent);
+    }
+  };
+
+  const handleClick = () => {
+    console.log('File upload clicked');
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
     }
   };
 
@@ -464,7 +519,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onChange, accept = "*" }) => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => document.getElementById('file-upload')?.click()}
+      onClick={handleClick}
     >
       <input
         type="file"

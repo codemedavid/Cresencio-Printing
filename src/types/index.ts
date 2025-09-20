@@ -41,6 +41,7 @@ export interface JobOrder {
   paper_sizes: string[];
   number_of_copies: number;
   instructions?: string;
+  total_amount_to_pay?: number;
   status: 'pending' | 'in_progress' | 'ready' | 'completed';
   created_at: string;
   updated_at: string;

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useVip } from '../contexts/VipContext';
+import { useJobOrders } from '../hooks/useJobOrders';
 import { JobOrder } from '../types';
 import Logo from './Logo';
-import { User, LogOut, Plus, FileText, Calendar, Package, Printer, ArrowRight, CheckCircle, Clock, XCircle, Eye } from 'lucide-react';
+import { User, LogOut, Plus, FileText } from 'lucide-react';
 
 const VipProfile: React.FC = () => {
   const navigate = useNavigate();
   const { currentVip, logout } = useVip();
-  const [orders, setOrders] = useState<JobOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { getOrdersByMemberId, loading } = useJobOrders();
+  const [memberOrders, setMemberOrders] = useState<JobOrder[]>([]);
 
   useEffect(() => {
     if (!currentVip) {
@@ -17,66 +18,10 @@ const VipProfile: React.FC = () => {
       return;
     }
 
-    // Simulate loading orders
-    const loadOrders = async () => {
-      setIsLoading(true);
-      try {
-        // Mock data - in real app, this would come from API
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const mockOrders: JobOrder[] = [
-          {
-            id: 1,
-            job_order_number: 'JO-2024001',
-            vip_member_id: currentVip.id,
-            delivery_type: 'pickup',
-            pickup_schedule: '2024-01-15T10:00:00Z',
-            paper_sizes: ['A4'],
-            number_of_copies: 50,
-            instructions: 'Black and white, double-sided',
-            status: 'completed',
-            created_at: '2024-01-10T09:00:00Z',
-            updated_at: '2024-01-15T10:30:00Z',
-          },
-          {
-            id: 2,
-            job_order_number: 'JO-2024002',
-            vip_member_id: currentVip.id,
-            delivery_type: 'delivery',
-            receiver_name: 'Jane Smith',
-            receiver_address: '456 Oak St, City, State',
-            receiver_mobile: '+1234567890',
-            paper_sizes: ['Letter', 'Legal'],
-            number_of_copies: 25,
-            instructions: 'Color printing, single-sided',
-            status: 'in_progress',
-            created_at: '2024-01-12T14:30:00Z',
-            updated_at: '2024-01-12T14:30:00Z',
-          },
-          {
-            id: 3,
-            job_order_number: 'JO-2024003',
-            vip_member_id: currentVip.id,
-            delivery_type: 'pickup',
-            paper_sizes: ['A4'],
-            number_of_copies: 100,
-            instructions: 'Binding required',
-            status: 'pending',
-            created_at: '2024-01-14T16:45:00Z',
-            updated_at: '2024-01-14T16:45:00Z',
-          },
-        ];
-        
-        setOrders(mockOrders);
-      } catch (error) {
-        console.error('Error loading orders:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadOrders();
-  }, [currentVip, navigate]);
+    // Load orders for the current VIP member
+    const ordersForMember = getOrdersByMemberId(currentVip.id);
+    setMemberOrders(ordersForMember);
+  }, [currentVip, navigate, getOrdersByMemberId]);
 
   const handleLogout = () => {
     logout();
@@ -210,12 +155,12 @@ const VipProfile: React.FC = () => {
             </div>
           </div>
 
-          {isLoading ? (
+          {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading orders...</p>
             </div>
-          ) : orders.length === 0 ? (
+          ) : memberOrders.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">No orders yet</p>
@@ -237,7 +182,7 @@ const VipProfile: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order) => (
+                  {memberOrders.map((order) => (
                     <tr key={order.id} className="cursor-pointer hover:bg-blue-50">
                       <td className="font-medium text-blue-600">{order.job_order_number}</td>
                       <td>{formatDate(order.created_at)}</td>

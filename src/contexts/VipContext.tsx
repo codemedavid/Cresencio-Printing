@@ -29,6 +29,7 @@ export const VipProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     // Check for stored VIP data on app load
     const storedVip = localStorage.getItem('vipMember');
+    
     if (storedVip) {
       try {
         const vipData = JSON.parse(storedVip);

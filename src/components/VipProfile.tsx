@@ -13,9 +13,17 @@ const VipProfile: React.FC = () => {
   const [memberOrders, setMemberOrders] = useState<JobOrder[]>([]);
 
   useEffect(() => {
+    // Check if user is logged in via context or localStorage
     if (!currentVip) {
-      navigate('/login');
-      return;
+      // Double-check localStorage in case context hasn't updated yet
+      const storedVip = localStorage.getItem('vipMember');
+      if (storedVip) {
+        // Don't redirect immediately, give context time to update
+        return;
+      } else {
+        navigate('/login');
+        return;
+      }
     }
 
     // Load orders for the current VIP member
@@ -53,7 +61,19 @@ const VipProfile: React.FC = () => {
     });
   };
 
+  // Show loading if we don't have currentVip but there might be stored data
   if (!currentVip) {
+    const storedVip = localStorage.getItem('vipMember');
+    if (storedVip) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-pink-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading profile...</p>
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { VipRegistrationForm, CustomerCategory } from '../types';
+import { VipRegistrationForm } from '../types';
 import Logo from './Logo';
-import { User, Mail, Phone, MapPin, GraduationCap, UserCheck, FileText, Upload, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { User, Mail, Phone, MapPin, GraduationCap, UserCheck, FileText, Upload, CheckCircle, ArrowRight, X } from 'lucide-react';
 
 const VipRegistration: React.FC = () => {
   const navigate = useNavigate();
@@ -36,11 +36,40 @@ const VipRegistration: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name } = e.target;
     const file = e.target.files?.[0];
+    
     if (file) {
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+      const isValidType = validTypes.includes(file.type);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
+      
+      if (!isValidType) {
+        alert(`File ${file.name} is not a supported format. Please upload PDF, JPG, or PNG files.`);
+        return;
+      }
+      
+      if (!isValidSize) {
+        alert(`File ${file.name} is too large. Please upload files smaller than 10MB.`);
+        return;
+      }
+      
       setFormData(prev => ({
         ...prev,
         [name]: file
       }));
+    }
+  };
+
+  const removeFile = (fieldName: keyof VipRegistrationForm) => {
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: undefined
+    }));
+    
+    // Clear the file input
+    const fileInput = document.querySelector(`input[name="${fieldName}"]`) as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = '';
     }
   };
 
@@ -143,6 +172,29 @@ const VipRegistration: React.FC = () => {
                 onChange={handleFileChange}
                 accept="image/*,.pdf"
               />
+              {formData.student_id_file && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-sm text-green-800 font-medium">
+                        {formData.student_id_file.name}
+                      </span>
+                      <span className="text-xs text-green-600">
+                        ({(formData.student_id_file.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile('student_id_file')}
+                      className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         );
@@ -177,6 +229,29 @@ const VipRegistration: React.FC = () => {
                 onChange={handleFileChange}
                 accept="image/*,.pdf"
               />
+              {formData.senior_id_file && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-sm text-green-800 font-medium">
+                        {formData.senior_id_file.name}
+                      </span>
+                      <span className="text-xs text-green-600">
+                        ({(formData.senior_id_file.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile('senior_id_file')}
+                      className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         );
@@ -208,6 +283,29 @@ const VipRegistration: React.FC = () => {
                 onChange={handleFileChange}
                 accept="image/*,.pdf"
               />
+              {formData.pwd_id_file && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-sm text-green-800 font-medium">
+                        {formData.pwd_id_file.name}
+                      </span>
+                      <span className="text-xs text-green-600">
+                        ({(formData.pwd_id_file.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile('pwd_id_file')}
+                      className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         );
@@ -224,6 +322,29 @@ const VipRegistration: React.FC = () => {
               onChange={handleFileChange}
               accept="image/*,.pdf"
             />
+            {formData.verification_id_file && (
+              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-green-800 font-medium">
+                      {formData.verification_id_file.name}
+                    </span>
+                    <span className="text-xs text-green-600">
+                      ({(formData.verification_id_file.size / 1024 / 1024).toFixed(2)} MB)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFile('verification_id_file')}
+                    className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                    title="Remove file"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
     }
@@ -431,11 +552,19 @@ const FileUpload: React.FC<FileUploadProps> = ({ id, name, onChange, accept = "*
     setIsDragOver(false);
     
     const files = e.dataTransfer.files;
+    
     if (files.length > 0) {
       const fakeEvent = {
         target: { files, name }
       } as React.ChangeEvent<HTMLInputElement>;
       onChange(fakeEvent);
+    }
+  };
+
+  const handleClick = () => {
+    const fileInput = document.getElementById(id) as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
     }
   };
 
@@ -445,7 +574,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ id, name, onChange, accept = "*
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => document.getElementById(id)?.click()}
+      onClick={handleClick}
     >
       <input
         type="file"

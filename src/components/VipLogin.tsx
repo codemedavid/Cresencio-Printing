@@ -52,11 +52,22 @@ const VipLogin: React.FC = () => {
         updated_at: new Date().toISOString(),
       };
 
-      // Check if VIP ID exists and is approved
-      if (formData.unique_id.startsWith('VIP-') && formData.unique_id.length >= 8) {
-        setCurrentVip(mockVipData);
+      // Accept any VIP ID that starts with VIP- and has at least 7 characters
+      if (formData.unique_id.startsWith('VIP-') && formData.unique_id.length >= 7) {
+        // Update the mock data to use the actual VIP ID entered
+        const updatedVipData = {
+          ...mockVipData,
+          unique_id: formData.unique_id
+        };
+        
+        // Set the VIP data in localStorage first
+        localStorage.setItem('vipMember', JSON.stringify(updatedVipData));
+        
+        // Set the context state
+        setCurrentVip(updatedVipData);
         setIsLoggedIn(true);
-        localStorage.setItem('vipMember', JSON.stringify(mockVipData));
+        
+        // Navigate to profile
         navigate('/profile');
       } else {
         setError('Invalid VIP ID. Please check your ID and try again.');

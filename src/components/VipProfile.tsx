@@ -10,7 +10,8 @@ const VipProfile: React.FC = () => {
   const navigate = useNavigate();
   const { currentVip, logout } = useVip();
   const { getOrdersByMemberId, loading } = useJobOrders();
-  const [pendingOrders, setPendingOrders] = useState<JobOrder[]>([]);
+  const [allOrders, setAllOrders] = useState<JobOrder[]>([]);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
 
   useEffect(() => {
     // Check if user is logged in via context or localStorage
@@ -28,11 +29,13 @@ const VipProfile: React.FC = () => {
 
     // Load orders for the current VIP member
     const ordersForMember = getOrdersByMemberId(currentVip.id);
-    
-    // Filter only pending orders
-    const pendingOnly = ordersForMember.filter(order => order.status === 'pending');
-    setPendingOrders(pendingOnly);
+    setAllOrders(ordersForMember);
   }, [currentVip, navigate, getOrdersByMemberId]);
+
+  // Filter orders based on selected status
+  const filteredOrders = filterStatus === 'all' 
+    ? allOrders 
+    : allOrders.filter(order => order.status === filterStatus);
 
   const handleLogout = () => {
     logout();
@@ -166,31 +169,78 @@ const VipProfile: React.FC = () => {
           </div>
         </div>
 
-        {/* Pending Orders */}
+        {/* Order History */}
         <div className="card">
           <div className="card-header">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Pending Orders</h2>
-              <Link to="/new-order" className="btn-primary flex items-center">
-                <Plus className="w-4 h-4 mr-2" />
-                Create New Order
-              </Link>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <h2 className="text-xl font-bold text-gray-900">Order History</h2>
+              <div className="flex items-center gap-4">
+                {/* Status Filter */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Filter:</label>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value as any)}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Orders</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="ready">Ready</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <Link to="/new-order" className="btn-primary flex items-center">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create New Order
+                </Link>
+              </div>
             </div>
           </div>
+
+          {/* Order Summary */}
+          {!loading && allOrders.length > 0 && (
+            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-gray-600">Order Summary:</span>
+                <div className="flex items-center space-x-4">
+                  <span className="text-gray-700">
+                    <strong>Total:</strong> {allOrders.length}
+                  </span>
+                  <span className="text-orange-600">
+                    <strong>Pending:</strong> {allOrders.filter(o => o.status === 'pending').length}
+                  </span>
+                  <span className="text-blue-600">
+                    <strong>In Progress:</strong> {allOrders.filter(o => o.status === 'in_progress').length}
+                  </span>
+                  <span className="text-yellow-600">
+                    <strong>Ready:</strong> {allOrders.filter(o => o.status === 'ready').length}
+                  </span>
+                  <span className="text-green-600">
+                    <strong>Completed:</strong> {allOrders.filter(o => o.status === 'completed').length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading orders...</p>
             </div>
-          ) : pendingOrders.length === 0 ? (
+          ) : filteredOrders.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-4">No pending orders</p>
-              <Link to="/new-order" className="btn-primary flex items-center justify-center mx-auto">
-                <Plus className="w-4 h-4 mr-2" />
-                Create New Order
-              </Link>
+              <p className="text-gray-600 mb-4">
+                {filterStatus === 'all' ? 'No orders yet' : `No ${filterStatus.replace('_', ' ')} orders`}
+              </p>
+              {filterStatus === 'all' && (
+                <Link to="/new-order" className="btn-primary flex items-center justify-center mx-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Order
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -206,7 +256,7 @@ const VipProfile: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingOrders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <tr key={order.id} className="cursor-pointer hover:bg-blue-50">
                       <td className="font-medium text-blue-600">{order.job_order_number}</td>
                       <td>{formatDate(order.created_at)}</td>

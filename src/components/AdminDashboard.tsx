@@ -4,6 +4,7 @@ import { VipMember, JobOrder, MemberStatus, OrderStatus } from '../types';
 import Logo from './Logo';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useJobOrders } from '../hooks/useJobOrders';
+import { useVipRegistrations } from '../hooks/useVipRegistrations';
 import { 
   Users, FileText, Search, CheckCircle, XCircle, Eye, 
   Menu, X, Download, LogOut, Bell, 
@@ -15,6 +16,7 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, adminUser, logout, isLoading } = useAdminAuth();
   const { orders, updateOrderStatus, updateOrderAmount } = useJobOrders();
+  const { registrations, updateMemberStatus, bulkUpdateMemberStatus } = useVipRegistrations();
   const [activeTab, setActiveTab] = useState<'overview' | 'registrations' | 'orders'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,47 +36,6 @@ const AdminDashboard: React.FC = () => {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
-  // Mock data - in real app, this would come from API
-  const [registrations, setRegistrations] = useState<VipMember[]>([
-    {
-      id: 1,
-      unique_id: 'VIP-123456',
-      full_name: 'John Doe',
-      address: '123 Main St, City, State',
-      email: 'john.doe@example.com',
-      mobile_number: '+1234567890',
-      customer_category: 'Regular Customer',
-      status: 'pending',
-      created_at: '2024-01-10T09:00:00Z',
-      updated_at: '2024-01-10T09:00:00Z',
-    },
-    {
-      id: 2,
-      unique_id: 'VIP-789012',
-      full_name: 'Jane Smith',
-      address: '456 Oak St, City, State',
-      email: 'jane.smith@example.com',
-      mobile_number: '+1234567891',
-      customer_category: 'Student',
-      school_name: 'University of Example',
-      status: 'approved',
-      created_at: '2024-01-11T10:30:00Z',
-      updated_at: '2024-01-11T10:30:00Z',
-    },
-    {
-      id: 3,
-      unique_id: 'VIP-345678',
-      full_name: 'Bob Johnson',
-      address: '789 Pine St, City, State',
-      email: 'bob.johnson@example.com',
-      mobile_number: '+1234567892',
-      customer_category: 'Senior Citizen',
-      senior_id_number: 'SC-12345',
-      status: 'rejected',
-      created_at: '2024-01-12T14:15:00Z',
-      updated_at: '2024-01-12T14:15:00Z',
-    },
-  ]);
 
 
   // Statistics
@@ -93,7 +54,7 @@ const AdminDashboard: React.FC = () => {
     navigate('/');
   };
 
-  const updateMemberStatus = (id: number, status: MemberStatus) => {
+  const handleUpdateMemberStatus = (id: number, status: MemberStatus) => {
     // Find the member to get their name for confirmation
     const member = registrations.find(reg => reg.id === id);
     const memberName = member?.full_name || 'Unknown Member';
@@ -104,13 +65,7 @@ const AdminDashboard: React.FC = () => {
     );
     
     if (confirmed) {
-      setRegistrations(prev => 
-        prev.map(reg => 
-          reg.id === id 
-            ? { ...reg, status, updated_at: new Date().toISOString() }
-            : reg
-        )
-      );
+      updateMemberStatus(id, status);
     }
   };
 
@@ -293,7 +248,7 @@ const AdminDashboard: React.FC = () => {
     );
   };
 
-  const bulkUpdateMemberStatus = (status: MemberStatus) => {
+  const handleBulkUpdateMemberStatus = (status: MemberStatus) => {
     const selectedMembersList = registrations.filter(reg => selectedMembers.includes(reg.id));
     const memberNames = selectedMembersList.map(reg => `${reg.full_name} (${reg.unique_id})`).join(', ');
     
@@ -302,13 +257,7 @@ const AdminDashboard: React.FC = () => {
     );
     
     if (confirmed) {
-      setRegistrations(prev => 
-        prev.map(reg => 
-          selectedMembers.includes(reg.id)
-            ? { ...reg, status, updated_at: new Date().toISOString() }
-            : reg
-        )
-      );
+      bulkUpdateMemberStatus(selectedMembers, status);
       setSelectedMembers([]);
     }
   };
@@ -564,14 +513,14 @@ const AdminDashboard: React.FC = () => {
                     {selectedMembers.length > 0 && (
                       <div className="flex space-x-2">
                         <button 
-                          onClick={() => bulkUpdateMemberStatus('approved')}
+                          onClick={() => handleBulkUpdateMemberStatus('approved')}
                           className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
                           Approve ({selectedMembers.length})
                         </button>
                         <button 
-                          onClick={() => bulkUpdateMemberStatus('rejected')}
+                          onClick={() => handleBulkUpdateMemberStatus('rejected')}
                           className="inline-flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                         >
                           <XCircle className="h-4 w-4 mr-1" />
@@ -664,7 +613,7 @@ const AdminDashboard: React.FC = () => {
                                 <span className={getStatusBadge(reg.status)}>{reg.status}</span>
                                 <select
                                   value={reg.status}
-                                  onChange={(e) => updateMemberStatus(reg.id, e.target.value as MemberStatus)}
+                                  onChange={(e) => handleUpdateMemberStatus(reg.id, e.target.value as MemberStatus)}
                                   className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ml-2"
                                 >
                                   <option value="pending">Pending</option>

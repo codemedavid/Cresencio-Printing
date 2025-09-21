@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useVip } from '../contexts/VipContext';
+import { useVipRegistrations } from '../hooks/useVipRegistrations';
+import { VipAuthService } from '../services/vipAuth';
 import { LoginForm } from '../types';
 import Logo from './Logo';
 import { User, LogIn, Info, ArrowRight } from 'lucide-react';
@@ -8,6 +10,7 @@ import { User, LogIn, Info, ArrowRight } from 'lucide-react';
 const VipLogin: React.FC = () => {
   const navigate = useNavigate();
   const { setCurrentVip, setIsLoggedIn } = useVip();
+  const { registrations, getRegistrationByVipId } = useVipRegistrations();
   const [formData, setFormData] = useState<LoginForm>({
     unique_id: '',
   });
@@ -35,42 +38,37 @@ const VipLogin: React.FC = () => {
     setError('');
 
     try {
-      // Simulate API call to validate VIP ID
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock VIP data - in real app, this would come from API
-      const mockVipData = {
-        id: 1,
+      // Authenticate user using Supabase
+      const authResult = await VipAuthService.authenticateUser({
         unique_id: formData.unique_id,
-        full_name: 'John Doe',
-        address: '123 Main St, City, State',
-        email: 'john.doe@example.com',
-        mobile_number: '+1234567890',
-        customer_category: 'Regular Customer' as const,
-        status: 'approved' as const,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      // Accept any VIP ID that starts with VIP- and has at least 7 characters
-      if (formData.unique_id.startsWith('VIP-') && formData.unique_id.length >= 7) {
-        // Update the mock data to use the actual VIP ID entered
-        const updatedVipData = {
-          ...mockVipData,
-          unique_id: formData.unique_id
-        };
-        
+        password: undefined // For now, we're using ID-only authentication
+      });
+      
+      if (authResult.success && authResult.user) {
         // Set the VIP data in localStorage first
-        localStorage.setItem('vipMember', JSON.stringify(updatedVipData));
+        localStorage.setItem('vipMember', JSON.stringify(authResult.user));
         
         // Set the context state
-        setCurrentVip(updatedVipData);
+        setCurrentVip(authResult.user);
         setIsLoggedIn(true);
         
         // Navigate to profile
         navigate('/profile');
       } else {
-        setError('Invalid VIP ID. Please check your ID and try again.');
+        // Check if user exists but is not approved
+        const userExists = await getRegistrationByVipId(formData.unique_id);
+        
+        if (userExists) {
+          if (userExists.status === 'pending') {
+            setError('Your VIP registration is still pending approval. Please wait for admin approval.');
+          } else if (userExists.status === 'rejected') {
+            setError('Your VIP registration has been rejected. Please contact support for assistance.');
+          } else {
+            setError('Your VIP account status is invalid. Please contact support.');
+          }
+        } else {
+          setError(authResult.error || 'Invalid VIP ID. Please check your ID and try again, or register for a new account.');
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -141,36 +139,49 @@ const VipLogin: React.FC = () => {
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-gray-600 font-medium">
-              Don't have a VIP ID?{' '}
-              <Link to="/register" className="text-primary hover:text-accent font-bold transition-colors duration-300 flex items-center justify-center">
-                Register here
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Link>
-            </p>
+            <button 
+              onClick={() => navigate('/register')}
+              className="btn-secondary hover-lift flex items-center justify-center mx-auto"
+              type="button"
+            >
+              Register
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </button>
           </div>
 
-          {/* Demo VIP IDs */}
-          <div className="mt-8 glass-card rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-primary mb-4 flex items-center">
-              <Info className="w-4 h-4 mr-2" />
-              Demo VIP IDs:
-            </h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center space-x-2 text-gray-700">
-                <div className="w-2 h-2 bg-primary rounded-full"></div>
-                <span>VIP-123456 (Regular Customer)</span>
+          {/* Available VIP IDs */}
+          {registrations.length > 0 && (
+            <div className="mt-8 glass-card rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-primary mb-4 flex items-center">
+                <Info className="w-4 h-4 mr-2" />
+                Available VIP IDs:
+              </h3>
+              <div className="space-y-2 text-sm max-h-32 overflow-y-auto">
+                {registrations.slice(0, 5).map((reg) => (
+                  <div key={reg.id} className="flex items-center justify-between text-gray-700">
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        reg.status === 'approved' ? 'bg-green-500' :
+                        reg.status === 'pending' ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}></div>
+                      <span>{reg.unique_id} ({reg.customer_category})</span>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      reg.status === 'approved' ? 'bg-green-100 text-green-800' :
+                      reg.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {reg.status}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center space-x-2 text-gray-700">
-                <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                <span>VIP-789012 (Student)</span>
-              </div>
-              <div className="flex items-center space-x-2 text-gray-700">
-                <div className="w-2 h-2 bg-accent rounded-full"></div>
-                <span>VIP-345678 (Senior Citizen)</span>
-              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Only approved accounts can login. Register for a new VIP ID if you don't have one.
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

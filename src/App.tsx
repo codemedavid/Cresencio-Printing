@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import Homepage from './components/Homepage';
 import VipRegistration from './components/VipRegistration';
 import VipLogin from './components/VipLogin';
@@ -13,6 +13,8 @@ function App() {
     <VipProvider>
       <Router>
         <div className="min-h-screen bg-gray-50">
+          {/* Debug Navigation */}
+      
           <Routes>
             <Route path="/" element={<Homepage />} />
             <Route path="/register" element={<VipRegistration />} />

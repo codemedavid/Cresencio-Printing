@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { VipRegistrationForm } from '../types';
+import { useVipRegistrations } from '../hooks/useVipRegistrations';
 import Logo from './Logo';
 import { User, Mail, Phone, MapPin, GraduationCap, UserCheck, FileText, Upload, CheckCircle, ArrowRight, X } from 'lucide-react';
 
 const VipRegistration: React.FC = () => {
   const navigate = useNavigate();
+  const { addRegistration, error: registrationError } = useVipRegistrations();
   const [formData, setFormData] = useState<VipRegistrationForm>({
     full_name: '',
     address: '',
@@ -13,7 +15,8 @@ const VipRegistration: React.FC = () => {
     mobile_number: '',
     customer_category: 'Regular Customer',
   });
-  const [errors, setErrors] = useState<Partial<VipRegistrationForm>>({});
+  const [errors, setErrors] = useState<Partial<VipRegistrationForm> & { general?: string }>({});
+  const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [generatedId, setGeneratedId] = useState('');
@@ -57,6 +60,15 @@ const VipRegistration: React.FC = () => {
         ...prev,
         [name]: file
       }));
+      
+      // Clear file error when file is uploaded
+      if (fileErrors[name]) {
+        setFileErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[name];
+          return newErrors;
+        });
+      }
     }
   };
 
@@ -104,7 +116,18 @@ const VipRegistration: React.FC = () => {
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    // File validations
+    const newFileErrors: Record<string, string> = {};
+    if (formData.customer_category === 'Student' && !formData.student_id_file) {
+      newFileErrors.student_id_file = 'Student ID file is required';
+    }
+    if (formData.customer_category === 'Senior Citizen' && !formData.senior_id_file) {
+      newFileErrors.senior_id_file = 'Senior ID file is required';
+    }
+    
+    setFileErrors(newFileErrors);
+    return Object.keys(newErrors).length === 0 && Object.keys(newFileErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,19 +140,37 @@ const VipRegistration: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create registration data
+      const registrationData = {
+        full_name: formData.full_name,
+        address: formData.address,
+        email: formData.email,
+        mobile_number: formData.mobile_number,
+        customer_category: formData.customer_category,
+        // Add category-specific fields
+        ...(formData.customer_category === 'Student' && { school_name: formData.school_name }),
+        ...(formData.customer_category === 'Senior Citizen' && { senior_id_number: formData.senior_id_number }),
+        // Note: In a real app, files would be uploaded to a server
+        // For now, we'll just note that files were uploaded
+        ...(formData.student_id_file && { student_id_file: formData.student_id_file.name }),
+        ...(formData.senior_id_file && { senior_id_file: formData.senior_id_file.name }),
+        ...(formData.pwd_id_file && { pwd_id_file: formData.pwd_id_file.name }),
+        ...(formData.verification_id_file && { verification_id_file: formData.verification_id_file.name }),
+      };
       
-      // Generate unique ID
-      const uniqueId = `VIP-${Date.now().toString().slice(-6)}`;
-      setGeneratedId(uniqueId);
+      // Add registration to the system using Supabase
+      const newMember = await addRegistration(registrationData);
+      
+      // Set the generated ID for display
+      setGeneratedId(newMember.unique_id);
       setShowSuccessModal(true);
       
-      // In a real app, you would save to database here
-      console.log('Registration data:', formData);
-      
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration error:', error);
+      // Show error message if available
+      if (error.message) {
+        setErrors({ general: error.message });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +213,7 @@ const VipRegistration: React.FC = () => {
                 onChange={handleFileChange}
                 accept="image/*,.pdf"
               />
+              {fileErrors.student_id_file && <p className="form-error">{fileErrors.student_id_file}</p>}
               {formData.student_id_file && (
                 <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center justify-between">
@@ -229,6 +271,7 @@ const VipRegistration: React.FC = () => {
                 onChange={handleFileChange}
                 accept="image/*,.pdf"
               />
+              {fileErrors.senior_id_file && <p className="form-error">{fileErrors.senior_id_file}</p>}
               {formData.senior_id_file && (
                 <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center justify-between">
@@ -462,6 +505,20 @@ const VipRegistration: React.FC = () => {
 
             {renderConditionalFields()}
 
+            {/* General error display */}
+            {errors.general && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800 font-medium">{errors.general}</p>
+              </div>
+            )}
+
+            {/* Registration error from hook */}
+            {registrationError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800 font-medium">{registrationError}</p>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -482,13 +539,14 @@ const VipRegistration: React.FC = () => {
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-gray-600 font-medium">
-              Already have a VIP ID?{' '}
-              <Link to="/login" className="text-primary hover:text-accent font-bold transition-colors duration-300 flex items-center justify-center">
-                Login here
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Link>
-            </p>
+            <button 
+              onClick={() => navigate('/login')}
+              className="btn-secondary hover-lift flex items-center justify-center mx-auto"
+              type="button"
+            >
+              Login
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </button>
           </div>
         </div>
       </div>

@@ -456,6 +456,18 @@ const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center">
+                      <div className="p-3 bg-orange-100 rounded-lg">
+                        <Clock className="h-6 w-6 text-orange-600" />
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600">Pending Orders</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Recent Activity */}
@@ -496,6 +508,66 @@ const AdminDashboard: React.FC = () => {
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Pending Orders Overview */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                  <div className="p-6 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">Pending Orders Overview</h3>
+                    <p className="text-sm text-gray-600">Orders waiting for admin action</p>
+                  </div>
+                  <div className="p-6">
+                    {stats.pendingOrders === 0 ? (
+                      <div className="text-center py-8">
+                        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">No pending orders at the moment</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {orders.filter(order => order.status === 'pending').slice(0, 5).map((order) => (
+                          <div key={order.id} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-4">
+                                <div>
+                                  <p className="font-medium text-gray-900">{order.job_order_number}</p>
+                                  <p className="text-sm text-gray-600">{order.vip_member?.full_name || 'Unknown Member'}</p>
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  <p><strong>Copies:</strong> {order.number_of_copies}</p>
+                                  <p><strong>Sizes:</strong> {order.paper_sizes.join(', ')}</p>
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  <p><strong>Type:</strong> {order.delivery_type}</p>
+                                  <p><strong>Amount:</strong> ₱{order.total_amount_to_pay?.toFixed(2) || '0.00'}</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="inline-block px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+                                PENDING
+                              </span>
+                              <button
+                                onClick={() => setSelectedOrder(order)}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              >
+                                View Details
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {stats.pendingOrders > 5 && (
+                          <div className="text-center pt-4">
+                            <button
+                              onClick={() => setActiveTab('orders')}
+                              className="text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              View All Orders ({stats.pendingOrders} total)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

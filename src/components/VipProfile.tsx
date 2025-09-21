@@ -10,7 +10,7 @@ const VipProfile: React.FC = () => {
   const navigate = useNavigate();
   const { currentVip, logout } = useVip();
   const { getOrdersByMemberId, loading } = useJobOrders();
-  const [memberOrders, setMemberOrders] = useState<JobOrder[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<JobOrder[]>([]);
 
   useEffect(() => {
     // Check if user is logged in via context or localStorage
@@ -28,7 +28,10 @@ const VipProfile: React.FC = () => {
 
     // Load orders for the current VIP member
     const ordersForMember = getOrdersByMemberId(currentVip.id);
-    setMemberOrders(ordersForMember);
+    
+    // Filter only pending orders
+    const pendingOnly = ordersForMember.filter(order => order.status === 'pending');
+    setPendingOrders(pendingOnly);
   }, [currentVip, navigate, getOrdersByMemberId]);
 
   const handleLogout = () => {
@@ -163,11 +166,11 @@ const VipProfile: React.FC = () => {
           </div>
         </div>
 
-        {/* Order History */}
+        {/* Pending Orders */}
         <div className="card">
           <div className="card-header">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Order History</h2>
+              <h2 className="text-xl font-bold text-gray-900">Pending Orders</h2>
               <Link to="/new-order" className="btn-primary flex items-center">
                 <Plus className="w-4 h-4 mr-2" />
                 Create New Order
@@ -180,13 +183,13 @@ const VipProfile: React.FC = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading orders...</p>
             </div>
-          ) : memberOrders.length === 0 ? (
+          ) : pendingOrders.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-4">No orders yet</p>
+              <p className="text-gray-600 mb-4">No pending orders</p>
               <Link to="/new-order" className="btn-primary flex items-center justify-center mx-auto">
                 <Plus className="w-4 h-4 mr-2" />
-                Create Your First Order
+                Create New Order
               </Link>
             </div>
           ) : (
@@ -198,11 +201,12 @@ const VipProfile: React.FC = () => {
                     <th>Date</th>
                     <th>Status</th>
                     <th>Type</th>
+                    <th>Amount</th>
                     <th>Details</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {memberOrders.map((order) => (
+                  {pendingOrders.map((order) => (
                     <tr key={order.id} className="cursor-pointer hover:bg-blue-50">
                       <td className="font-medium text-blue-600">{order.job_order_number}</td>
                       <td>{formatDate(order.created_at)}</td>
@@ -212,6 +216,9 @@ const VipProfile: React.FC = () => {
                         </span>
                       </td>
                       <td className="capitalize">{order.delivery_type}</td>
+                      <td className="font-semibold text-green-600">
+                        {order.total_amount_to_pay ? `₱${order.total_amount_to_pay.toFixed(2)}` : 'N/A'}
+                      </td>
                       <td>
                         <div className="text-sm">
                           <p><strong>Copies:</strong> {order.number_of_copies}</p>

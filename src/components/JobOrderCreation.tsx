@@ -122,6 +122,8 @@ const JobOrderCreation: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    console.log('Validating form with data:', formData);
+
     if (formData.paper_sizes.length === 0) {
       newErrors.paper_sizes = 'Please select at least one paper size';
     }
@@ -146,6 +148,11 @@ const JobOrderCreation: React.FC = () => {
       newErrors.pickup_schedule = 'Pickup schedule is required';
     }
 
+    if (formData.files.length === 0) {
+      newErrors.files = 'Please upload at least one file';
+    }
+
+    console.log('Validation errors:', newErrors);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -153,10 +160,21 @@ const JobOrderCreation: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm() || !currentVip) {
+    console.log('Form submitted with data:', formData);
+    console.log('Current VIP:', currentVip);
+    
+    if (!currentVip) {
+      console.error('No current VIP found');
+      alert('Please log in to create an order');
+      return;
+    }
+    
+    if (!validateForm()) {
+      console.error('Form validation failed:', errors);
       return;
     }
 
+    console.log('Form validation passed, creating order...');
     setIsSubmitting(true);
 
     try {
@@ -166,11 +184,11 @@ const JobOrderCreation: React.FC = () => {
       // Create the order using the hook
       const newOrder = createOrder(formData, currentVip);
       
+      console.log('Order created successfully:', newOrder);
+      
       // Set the generated order number for display
       setGeneratedOrderNumber(newOrder.job_order_number);
       setShowSuccessModal(true);
-      
-      console.log('Order created successfully:', newOrder);
       
     } catch (error) {
       console.error('Order submission error:', error);
@@ -415,13 +433,26 @@ const JobOrderCreation: React.FC = () => {
             </div>
 
             {/* File Upload Validation Error */}
-            {formData.files.length === 0 && (
-              <p className="form-error text-center">Please upload at least one file to submit your order</p>
+            {errors.files && (
+              <p className="form-error text-center">{errors.files}</p>
+            )}
+            
+            {/* General validation errors */}
+            {Object.keys(errors).length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h4 className="text-red-800 font-medium mb-2">Please fix the following errors:</h4>
+                <ul className="text-red-700 text-sm space-y-1">
+                  {Object.entries(errors).map(([field, error]) => (
+                    <li key={field}>• {error}</li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting || formData.files.length === 0}
+              onClick={() => console.log('Submit button clicked', { isSubmitting, filesLength: formData.files.length, formData })}
               className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isSubmitting ? (

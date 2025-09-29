@@ -154,7 +154,7 @@ const Homepage: React.FC = () => {
             </div>
             <p className="text-white mb-4 text-lg font-bold">Cresencio Printing and Services</p>
             <p className="text-gray-400 mb-6">
-              Email: info@cresencio-printing.com | Phone: (555) 123-4567
+              Email: cresencioprintingservices@gmail.com | Phone: (083)887-1606
             </p>
             <div className="border-t border-gray-700 pt-6">
               <p className="text-gray-500 text-sm">

@@ -1,0 +1,19 @@
+[
+  {
+    "id": 1,
+    "unique_id": "VIP-046817",
+    "full_name": "Test Customer",
+    "address": "123 Test St",
+    "email": "test@example.com",
+    "school_name": null,
+    "student_id_file": null,
+    "senior_id_number": null,
+    "senior_id_file": null,
+    "pwd_id_number": null,
+    "pwd_id_file": null,
+    "verification_id_file": null,
+    "status": "approved",
+    "created_at": "2025-09-29T16:40:46.817Z",
+    "updated_at": "2025-09-29T16:40:58.570Z"
+  }
+]

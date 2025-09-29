@@ -178,11 +178,8 @@ const JobOrderCreation: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Create the order using the hook
-      const newOrder = createOrder(formData, currentVip);
+      // Create the order using the hook (now async)
+      const newOrder = await createOrder(formData, currentVip);
       
       console.log('Order created successfully:', newOrder);
       

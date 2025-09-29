@@ -1,7 +1,7 @@
 // API Service for Printing Shop VIP System
 // This service handles all API calls to the backend
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -49,10 +49,36 @@ class ApiService {
 
   // VIP Member endpoints
   async registerVipMember(formData: FormData): Promise<ApiResponse<{ unique_id: string }>> {
-    return this.request('/vip-members/register', {
-      method: 'POST',
-      body: formData,
-    });
+    try {
+      // For file uploads with FormData, we need to let the browser set the Content-Type header
+      // to multipart/form-data with the proper boundary
+      const response = await fetch(`${API_BASE_URL}/vip-members/register`, {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header - let browser set it automatically
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || 'Registration failed',
+        };
+      }
+
+      return {
+        success: true,
+        data: data.data || data,
+        message: data.message,
+      };
+    } catch (error) {
+      console.error('VIP registration request failed:', error);
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.',
+      };
+    }
   }
 
   async loginVipMember(uniqueId: string): Promise<ApiResponse<any>> {
@@ -78,12 +104,33 @@ class ApiService {
     return this.request(`/job-orders/member/${vipMemberId}`);
   }
 
-  async updateJobOrderStatus(orderId: number, status: string): Promise<ApiResponse<any>> {
-    return this.request(`/job-orders/${orderId}/status`, {
+  async updateJobOrderStatus(orderId: number, status: string): Promise<ApiResponse<JobOrder>> {
+    return this.request(`/admin/job-orders/${orderId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
   }
+
+  async updateJobOrderAmount(orderId: number, amount: number): Promise<ApiResponse<JobOrder>> {
+    return this.request(`/admin/job-orders/${orderId}/amount`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amount }),
+    });
+  }
+
+  async deleteJobOrder(orderId: number): Promise<ApiResponse<any>> {
+    return this.request(`/admin/job-orders/${orderId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async bulkDeleteJobOrders(orderIds: number[]): Promise<ApiResponse<any>> {
+    return this.request('/admin/job-orders', {
+      method: 'DELETE',
+      body: JSON.stringify({ orderIds }),
+    });
+  }
+
 
   // Admin endpoints
   async getVipRegistrations(): Promise<ApiResponse<any[]>> {
@@ -108,16 +155,42 @@ class ApiService {
 
   // File upload endpoint
   async uploadFile(file: File, orderId?: number): Promise<ApiResponse<{ file_path: string }>> {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (orderId) {
-      formData.append('order_id', orderId.toString());
-    }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (orderId) {
+        formData.append('order_id', orderId.toString());
+      }
 
-    return this.request('/upload', {
-      method: 'POST',
-      body: formData,
-    });
+      // For file uploads, we need to let the browser set the Content-Type header
+      // to multipart/form-data with the proper boundary
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header - let browser set it automatically
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || 'Upload failed',
+        };
+      }
+
+      return {
+        success: true,
+        data: data.data || data,
+        message: data.message,
+      };
+    } catch (error) {
+      console.error('File upload request failed:', error);
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.',
+      };
+    }
   }
 }
 

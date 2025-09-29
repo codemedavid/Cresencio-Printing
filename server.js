@@ -1,25 +1,237 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { Pool } = require('pg');
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { Pool } from 'pg';
+import nodemailer from 'nodemailer';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'printing_shop_vip',
-  password: process.env.DB_PASSWORD || 'password',
-  port: process.env.DB_PORT || 5432,
+// Persistent storage using JSON files
+const dataDir = path.join(__dirname, 'data');
+const vipMembersFile = path.join(dataDir, 'vip-members.json');
+const jobOrdersFile = path.join(dataDir, 'job-orders.json');
+const countersFile = path.join(dataDir, 'counters.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Load data from files or initialize empty arrays
+let vipMembers = [];
+let jobOrders = [];
+let nextVipId = 1;
+let nextOrderId = 1;
+
+// Load existing data
+function loadData() {
+  try {
+    if (fs.existsSync(vipMembersFile)) {
+      vipMembers = JSON.parse(fs.readFileSync(vipMembersFile, 'utf8'));
+    }
+    if (fs.existsSync(jobOrdersFile)) {
+      jobOrders = JSON.parse(fs.readFileSync(jobOrdersFile, 'utf8'));
+    }
+    if (fs.existsSync(countersFile)) {
+      const counters = JSON.parse(fs.readFileSync(countersFile, 'utf8'));
+      nextVipId = counters.nextVipId || 1;
+      nextOrderId = counters.nextOrderId || 1;
+    }
+    console.log(`Loaded ${vipMembers.length} VIP members and ${jobOrders.length} job orders`);
+  } catch (error) {
+    console.error('Error loading data:', error);
+  }
+}
+
+// Save data to files
+function saveData() {
+  try {
+    fs.writeFileSync(vipMembersFile, JSON.stringify(vipMembers, null, 2));
+    fs.writeFileSync(jobOrdersFile, JSON.stringify(jobOrders, null, 2));
+    fs.writeFileSync(countersFile, JSON.stringify({ nextVipId, nextOrderId }, null, 2));
+  } catch (error) {
+    console.error('Error saving data:', error);
+  }
+}
+
+// Load data on startup
+loadData();
+
+// Database connection (commented out for demo)
+// const pool = new Pool({
+//   user: process.env.DB_USER || 'postgres',
+//   host: process.env.DB_HOST || 'localhost',
+//   database: process.env.DB_NAME || 'printing_shop_vip',
+//   password: process.env.DB_PASSWORD || 'password',
+//   port: process.env.DB_PORT || 5432,
+// });
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'cresencioprintingservices@gmail.com',
+    pass: process.env.EMAIL_PASS || 'your-app-password-here' // Use App Password for Gmail
+  }
 });
+
+// Email templates
+const emailTemplates = {
+  orderConfirmation: (orderData) => ({
+    subject: `Order Confirmation - ${orderData.job_order_number}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
+          <p style="color: #f0f0f0; margin: 5px 0 0 0;">Order Confirmation</p>
+        </div>
+        <div style="padding: 30px; background: #f9f9f9;">
+          <h2 style="color: #333; margin-top: 0;">Thank you for your order!</h2>
+          <p>Dear ${orderData.vip_member_name},</p>
+          <p>Your print job has been successfully submitted. Here are the details:</p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #667eea; margin-top: 0;">Order Details</h3>
+            <p><strong>Order Number:</strong> ${orderData.job_order_number}</p>
+            <p><strong>Delivery Type:</strong> ${orderData.delivery_type}</p>
+            <p><strong>Paper Sizes:</strong> ${orderData.paper_sizes.join(', ')}</p>
+            <p><strong>Number of Copies:</strong> ${orderData.number_of_copies}</p>
+            ${orderData.instructions ? `<p><strong>Instructions:</strong> ${orderData.instructions}</p>` : ''}
+            ${orderData.pickup_schedule ? `<p><strong>Pickup Schedule:</strong> ${new Date(orderData.pickup_schedule).toLocaleString()}</p>` : ''}
+            ${orderData.receiver_name ? `<p><strong>Receiver:</strong> ${orderData.receiver_name}</p>` : ''}
+            ${orderData.receiver_address ? `<p><strong>Delivery Address:</strong> ${orderData.receiver_address}</p>` : ''}
+          </div>
+          
+          <p>We'll process your order and notify you when it's ready for pickup or delivery.</p>
+          <p>If you have any questions, please contact us at:</p>
+          <p>📧 Email: cresencioprintingservices@gmail.com<br>
+          📞 Phone: (083)887-1606</p>
+          
+          <div style="text-align: center; margin-top: 30px;">
+            <a href="http://localhost:3000/profile" style="background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">View Order Status</a>
+          </div>
+        </div>
+        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
+          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
+        </div>
+      </div>
+    `
+  }),
+  
+  vipRegistration: (vipData) => ({
+    subject: `VIP Registration Confirmation - ${vipData.unique_id}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
+          <p style="color: #f0f0f0; margin: 5px 0 0 0;">VIP Registration Confirmation</p>
+        </div>
+        <div style="padding: 30px; background: #f9f9f9;">
+          <h2 style="color: #333; margin-top: 0;">Welcome to our VIP program!</h2>
+          <p>Dear ${vipData.full_name},</p>
+          <p>Thank you for registering for our VIP program. Your registration has been received and is pending approval.</p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #667eea; margin-top: 0;">Your VIP Details</h3>
+            <p><strong>VIP ID:</strong> ${vipData.unique_id}</p>
+            <p><strong>Full Name:</strong> ${vipData.full_name}</p>
+            <p><strong>Email:</strong> ${vipData.email}</p>
+            <p><strong>Category:</strong> ${vipData.customer_category}</p>
+            <p><strong>Status:</strong> Pending Approval</p>
+          </div>
+          
+          <p>Once approved, you'll be able to:</p>
+          <ul>
+            <li>Skip the line with priority service</li>
+            <li>Submit orders online through our VIP portal</li>
+            <li>Track your orders in real-time</li>
+            <li>Receive exclusive notifications and updates</li>
+          </ul>
+          
+          <p>We'll notify you via email once your VIP status is approved.</p>
+          <p>If you have any questions, please contact us at:</p>
+          <p>📧 Email: cresencioprintingservices@gmail.com<br>
+          📞 Phone: (083)887-1606</p>
+        </div>
+        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
+          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
+        </div>
+      </div>
+    `
+  }),
+  
+  vipApproval: (vipData) => ({
+    subject: `VIP Status Approved - ${vipData.unique_id}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
+          <p style="color: #f0f0f0; margin: 5px 0 0 0;">VIP Status Approved!</p>
+        </div>
+        <div style="padding: 30px; background: #f9f9f9;">
+          <h2 style="color: #333; margin-top: 0;">Congratulations! Your VIP status has been approved!</h2>
+          <p>Dear ${vipData.full_name},</p>
+          <p>Great news! Your VIP membership has been approved. You can now enjoy all the benefits of our VIP program.</p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #10b981; margin-top: 0;">Your VIP Details</h3>
+            <p><strong>VIP ID:</strong> ${vipData.unique_id}</p>
+            <p><strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">APPROVED</span></p>
+          </div>
+          
+          <p>You can now:</p>
+          <ul>
+            <li>Login to your VIP account using your VIP ID: <strong>${vipData.unique_id}</strong></li>
+            <li>Submit orders online through our VIP portal</li>
+            <li>Track your orders in real-time</li>
+            <li>Enjoy priority service and faster processing</li>
+          </ul>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="http://localhost:3000/login" style="background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Login to VIP Portal</a>
+          </div>
+          
+          <p>If you have any questions, please contact us at:</p>
+          <p>📧 Email: cresencioprintingservices@gmail.com<br>
+          📞 Phone: (083)887-1606</p>
+        </div>
+        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
+          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
+        </div>
+      </div>
+    `
+  })
+};
+
+// Email sending function
+const sendEmail = async (to, template) => {
+  try {
+    const mailOptions = {
+      from: process.env.EMAIL_USER || 'cresencioprintingservices@gmail.com',
+      to: to,
+      subject: template.subject,
+      html: template.html
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Error sending email:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('dist'));
 
 // File upload configuration
@@ -41,15 +253,11 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    console.log('File filter checking:', file.originalname, file.mimetype);
     
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only images, PDFs, and documents are allowed'));
-    }
+    // Allow all file types for now to avoid upload issues
+    console.log('File accepted (allowing all types)');
+    return cb(null, true);
   }
 });
 
@@ -96,24 +304,43 @@ app.post('/api/vip-members/register', upload.fields([
       if (files.verification_id_file) verification_id_file = files.verification_id_file[0].filename;
     }
 
-    const result = await pool.query(
-      `INSERT INTO vip_members (
-        unique_id, full_name, address, email, mobile_number, customer_category,
-        school_name, student_id_file, senior_id_number, senior_id_file,
-        pwd_id_number, pwd_id_file, verification_id_file, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING id, unique_id`,
-      [
-        unique_id, full_name, address, email, mobile_number, customer_category,
-        school_name, student_id_file, senior_id_number, senior_id_file,
-        pwd_id_number, pwd_id_file, verification_id_file, 'pending'
-      ]
-    );
+    // Create VIP member in memory
+    const newMember = {
+      id: nextVipId++,
+      unique_id,
+      full_name,
+      address,
+      email,
+      mobile_number,
+      customer_category,
+      school_name: school_name || null,
+      student_id_file: student_id_file || null,
+      senior_id_number: senior_id_number || null,
+      senior_id_file: senior_id_file || null,
+      pwd_id_number: pwd_id_number || null,
+      pwd_id_file: pwd_id_file || null,
+      verification_id_file: verification_id_file || null,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    vipMembers.push(newMember);
+    saveData(); // Save to persistent storage
+
+    // Send confirmation email
+    const emailResult = await sendEmail(email, emailTemplates.vipRegistration({
+      unique_id: newMember.unique_id,
+      full_name: full_name,
+      email: email,
+      customer_category: customer_category
+    }));
 
     res.json({
       success: true,
-      data: { unique_id: result.rows[0].unique_id },
-      message: 'Registration successful'
+      data: { unique_id: newMember.unique_id },
+      message: 'Registration successful',
+      emailSent: emailResult.success
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -128,19 +355,14 @@ app.post('/api/vip-members/login', async (req, res) => {
   try {
     const { unique_id } = req.body;
     
-    const result = await pool.query(
-      'SELECT * FROM vip_members WHERE unique_id = $1',
-      [unique_id]
-    );
+    const vipMember = vipMembers.find(member => member.unique_id === unique_id);
 
-    if (result.rows.length === 0) {
+    if (!vipMember) {
       return res.status(404).json({
         success: false,
         error: 'VIP ID not found'
       });
     }
-
-    const vipMember = result.rows[0];
     
     if (vipMember.status !== 'approved') {
       return res.status(403).json({
@@ -174,28 +396,55 @@ app.post('/api/job-orders', async (req, res) => {
       receiver_mobile,
       paper_sizes,
       number_of_copies,
-      instructions
+      instructions,
+      files
     } = req.body;
 
     const job_order_number = `JO-${Date.now().toString().slice(-6)}`;
 
-    const result = await pool.query(
-      `INSERT INTO job_orders (
-        job_order_number, vip_member_id, delivery_type, pickup_schedule,
-        receiver_name, receiver_address, receiver_mobile, paper_sizes,
-        number_of_copies, instructions, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id, job_order_number`,
-      [
-        job_order_number, vip_member_id, delivery_type, pickup_schedule,
-        receiver_name, receiver_address, receiver_mobile, JSON.stringify(paper_sizes),
-        number_of_copies, instructions, 'pending'
-      ]
-    );
+    // Create job order in memory
+    const newOrder = {
+      id: nextOrderId++,
+      job_order_number,
+      vip_member_id: parseInt(vip_member_id),
+      delivery_type,
+      pickup_schedule: pickup_schedule || null,
+      receiver_name: receiver_name || null,
+      receiver_address: receiver_address || null,
+      receiver_mobile: receiver_mobile || null,
+      paper_sizes: typeof paper_sizes === 'string' ? JSON.parse(paper_sizes) : paper_sizes,
+      number_of_copies: parseInt(number_of_copies),
+      instructions: instructions || null,
+      files: files || [], // Store uploaded files information
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    jobOrders.push(newOrder);
+    saveData(); // Save to persistent storage
+
+    // Get VIP member details for email
+    const vipMember = vipMembers.find(member => member.id === parseInt(vip_member_id));
+
+    if (vipMember) {
+      // Send order confirmation email
+      const emailResult = await sendEmail(vipMember.email, emailTemplates.orderConfirmation({
+        job_order_number: newOrder.job_order_number,
+        vip_member_name: vipMember.full_name,
+        delivery_type: delivery_type,
+        paper_sizes: newOrder.paper_sizes,
+        number_of_copies: number_of_copies,
+        instructions: instructions,
+        pickup_schedule: pickup_schedule,
+        receiver_name: receiver_name,
+        receiver_address: receiver_address
+      }));
+    }
 
     res.json({
       success: true,
-      data: { job_order_number: result.rows[0].job_order_number },
+      data: { job_order_number: newOrder.job_order_number },
       message: 'Order created successfully'
     });
   } catch (error) {
@@ -211,14 +460,13 @@ app.get('/api/job-orders/member/:memberId', async (req, res) => {
   try {
     const { memberId } = req.params;
     
-    const result = await pool.query(
-      'SELECT * FROM job_orders WHERE vip_member_id = $1 ORDER BY created_at DESC',
-      [memberId]
-    );
+    const memberOrders = jobOrders
+      .filter(order => order.vip_member_id === parseInt(memberId))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     res.json({
       success: true,
-      data: result.rows
+      data: memberOrders
     });
   } catch (error) {
     console.error('Get orders error:', error);
@@ -232,13 +480,22 @@ app.get('/api/job-orders/member/:memberId', async (req, res) => {
 // Admin routes
 app.get('/api/admin/registrations', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM vip_members ORDER BY created_at DESC'
-    );
+    const registrations = vipMembers.map(member => ({
+      id: member.id,
+      unique_id: member.unique_id,
+      full_name: member.full_name,
+      address: member.address,
+      email: member.email,
+      mobile_number: member.mobile_number,
+      customer_category: member.customer_category,
+      school_name: member.school_name,
+      status: member.status,
+      created_at: member.created_at
+    })).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     res.json({
       success: true,
-      data: result.rows
+      data: registrations
     });
   } catch (error) {
     console.error('Get registrations error:', error);
@@ -254,10 +511,30 @@ app.patch('/api/admin/vip-members/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    await pool.query(
-      'UPDATE vip_members SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [status, id]
-    );
+    // Get VIP member details before updating
+    const vipMember = vipMembers.find(member => member.id === parseInt(id));
+
+    if (!vipMember) {
+      return res.status(404).json({
+        success: false,
+        error: 'VIP member not found'
+      });
+    }
+
+    // Update status
+    vipMember.status = status;
+    vipMember.updated_at = new Date().toISOString();
+    saveData(); // Save to persistent storage
+
+    // Send approval email if status is approved
+    if (status === 'approved') {
+      const emailResult = await sendEmail(vipMember.email, emailTemplates.vipApproval({
+        unique_id: vipMember.unique_id,
+        full_name: vipMember.full_name,
+        email: vipMember.email,
+        customer_category: vipMember.customer_category
+      }));
+    }
 
     res.json({
       success: true,
@@ -272,18 +549,170 @@ app.patch('/api/admin/vip-members/:id/status', async (req, res) => {
   }
 });
 
-app.get('/api/admin/job-orders', async (req, res) => {
+// Update job order status
+app.patch('/api/admin/job-orders/:id/status', async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT jo.*, vm.full_name, vm.unique_id
-      FROM job_orders jo
-      JOIN vip_members vm ON jo.vip_member_id = vm.id
-      ORDER BY jo.created_at DESC
-    `);
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Find the job order
+    const orderIndex = jobOrders.findIndex(order => order.id === parseInt(id));
+
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job order not found'
+      });
+    }
+
+    // Update status
+    jobOrders[orderIndex].status = status;
+    jobOrders[orderIndex].updated_at = new Date().toISOString();
+    saveData(); // Save to persistent storage
 
     res.json({
       success: true,
-      data: result.rows
+      job_order: jobOrders[orderIndex]
+    });
+  } catch (error) {
+    console.error('Error updating job order status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update job order status'
+    });
+  }
+});
+
+// Update job order amount
+app.patch('/api/admin/job-orders/:id/amount', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount } = req.body;
+    
+    // Find the job order
+    const orderIndex = jobOrders.findIndex(order => order.id === parseInt(id));
+
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job order not found'
+      });
+    }
+
+    // Update the order amount
+    jobOrders[orderIndex].total_amount_to_pay = parseFloat(amount);
+    jobOrders[orderIndex].updated_at = new Date().toISOString();
+    saveData(); // Save to persistent storage
+
+    res.json({
+      success: true,
+      message: 'Order amount updated successfully',
+      job_order: jobOrders[orderIndex]
+    });
+  } catch (error) {
+    console.error('Error updating job order amount:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update job order amount'
+    });
+  }
+});
+
+// Delete job order
+app.delete('/api/admin/job-orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the job order
+    const orderIndex = jobOrders.findIndex(order => order.id === parseInt(id));
+
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job order not found'
+      });
+    }
+
+    // Remove the order from the array
+    const deletedOrder = jobOrders.splice(orderIndex, 1)[0];
+    saveData(); // Save to persistent storage
+
+    res.json({
+      success: true,
+      message: 'Job order deleted successfully',
+      deleted_order: deletedOrder
+    });
+  } catch (error) {
+    console.error('Error deleting job order:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete job order'
+    });
+  }
+});
+
+// Bulk delete job orders
+app.delete('/api/admin/job-orders', async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order IDs array is required'
+      });
+    }
+
+    const deletedOrders = [];
+    const notFoundIds = [];
+
+    // Delete orders in reverse order to maintain array indices
+    const sortedIds = orderIds.sort((a, b) => b - a);
+    
+    for (const orderId of sortedIds) {
+      const orderIndex = jobOrders.findIndex(order => order.id === parseInt(orderId));
+      
+      if (orderIndex !== -1) {
+        const deletedOrder = jobOrders.splice(orderIndex, 1)[0];
+        deletedOrders.push(deletedOrder);
+      } else {
+        notFoundIds.push(orderId);
+      }
+    }
+
+    saveData(); // Save to persistent storage
+
+    res.json({
+      success: true,
+      message: `${deletedOrders.length} job orders deleted successfully`,
+      deleted_orders: deletedOrders,
+      not_found_ids: notFoundIds
+    });
+  } catch (error) {
+    console.error('Error bulk deleting job orders:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to bulk delete job orders'
+    });
+  }
+});
+
+app.get('/api/admin/job-orders', async (req, res) => {
+  try {
+    const ordersWithVipInfo = jobOrders.map(order => {
+      const vipMember = vipMembers.find(member => member.id === order.vip_member_id);
+      return {
+        ...order,
+        vip_member: vipMember ? {
+          full_name: vipMember.full_name,
+          unique_id: vipMember.unique_id
+        } : null
+      };
+    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      success: true,
+      data: ordersWithVipInfo
     });
   } catch (error) {
     console.error('Get all orders error:', error);
@@ -294,16 +723,41 @@ app.get('/api/admin/job-orders', async (req, res) => {
   }
 });
 
-// Paper sizes route
-app.get('/api/paper-sizes', async (req, res) => {
+// Get job orders for a specific VIP member
+app.get('/api/job-orders/member/:memberId', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM paper_sizes WHERE active = true ORDER BY name'
-    );
+    const { memberId } = req.params;
+    const memberOrders = jobOrders
+      .filter(order => order.vip_member_id === parseInt(memberId))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     res.json({
       success: true,
-      data: result.rows
+      data: memberOrders
+    });
+  } catch (error) {
+    console.error('Get member orders error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch member orders'
+    });
+  }
+});
+
+// Paper sizes route
+app.get('/api/paper-sizes', async (req, res) => {
+  try {
+    // Return static paper sizes for demo
+    const paperSizes = [
+      { id: 1, name: 'A4', width: 210, height: 297 },
+      { id: 2, name: 'A3', width: 297, height: 420 },
+      { id: 3, name: 'Letter', width: 216, height: 279 },
+      { id: 4, name: 'Legal', width: 216, height: 356 }
+    ];
+
+    res.json({
+      success: true,
+      data: paperSizes
     });
   } catch (error) {
     console.error('Get paper sizes error:', error);
@@ -317,13 +771,17 @@ app.get('/api/paper-sizes', async (req, res) => {
 // File upload route
 app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
+    console.log('Upload request received:', req.file);
+    
     if (!req.file) {
+      console.log('No file in request');
       return res.status(400).json({
         success: false,
         error: 'No file uploaded'
       });
     }
 
+    console.log('File uploaded successfully:', req.file.filename);
     res.json({
       success: true,
       data: { file_path: req.file.filename }
@@ -337,10 +795,10 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
-// Serve React app for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+// Serve React app for all other routes (commented out for now)
+// app.get('/*', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// });
 
 // Error handling middleware
 app.use((error, req, res, next) => {

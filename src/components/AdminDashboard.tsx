@@ -9,13 +9,13 @@ import {
   Users, FileText, Search, CheckCircle, XCircle, Eye, 
   Menu, X, Download, LogOut, Bell, 
   Clock, UserCheck, BarChart3, Edit, Save, XCircle as XCircleIcon,
-  FileDown
+  FileDown, Trash2
 } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, adminUser, logout, isLoading } = useAdminAuth();
-  const { orders, updateOrderStatus, updateOrderAmount } = useJobOrders();
+  const { orders, updateOrderStatus, updateOrderAmount, loadAllOrders, deleteOrder, bulkDeleteOrders } = useJobOrders();
   const { registrations, updateMemberStatus, bulkUpdateMemberStatus } = useVipRegistrations();
   const [activeTab, setActiveTab] = useState<'overview' | 'registrations' | 'orders'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -26,6 +26,9 @@ const AdminDashboard: React.FC = () => {
   const [tempAmount, setTempAmount] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<number[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
+  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<JobOrder | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   
   // Redirect if not authenticated (but wait for loading to complete)
   useEffect(() => {
@@ -36,9 +39,16 @@ const AdminDashboard: React.FC = () => {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
+  // Load orders from server when component mounts
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAllOrders();
+    }
+  }, [isAuthenticated, loadAllOrders]);
 
 
-  // Statistics
+
+  // Statistics - Dynamic data from actual orders and registrations
   const stats = {
     totalMembers: registrations.length,
     pendingMembers: registrations.filter(r => r.status === 'pending').length,
@@ -47,6 +57,7 @@ const AdminDashboard: React.FC = () => {
     pendingOrders: orders.filter(o => o.status === 'pending').length,
     completedOrders: orders.filter(o => o.status === 'completed').length,
     inProgressOrders: orders.filter(o => o.status === 'in_progress').length,
+    readyOrders: orders.filter(o => o.status === 'ready').length,
   };
 
   const handleLogout = () => {
@@ -85,6 +96,28 @@ const AdminDashboard: React.FC = () => {
     }
     setEditingAmount(null);
     setTempAmount('');
+  };
+
+  const handleDeleteOrder = async (order: JobOrder) => {
+    const success = await deleteOrder(order.id);
+    if (success) {
+      setDeleteConfirmOrder(null);
+      // Show success message
+      console.log(`Order ${order.job_order_number} deleted successfully`);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const selectedOrderIds = selectedFiles;
+    const result = await bulkDeleteOrders(selectedOrderIds);
+    
+    if (result.success) {
+      setSelectedFiles([]);
+      setShowBulkDeleteConfirm(false);
+      console.log(`Successfully deleted ${result.deletedCount} orders`);
+    } else {
+      console.error('Bulk delete failed:', result.error);
+    }
   };
 
   const cancelEditingAmount = () => {
@@ -276,11 +309,15 @@ const AdminDashboard: React.FC = () => {
     reg.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredOrders = orders.filter(order =>
-    order.job_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (order.vip_member?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.job_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.vip_member?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.status.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesFilter = orderFilter === 'all' || order.status === orderFilter;
+    
+    return matchesSearch && matchesFilter;
+  });
 
   const getStatusBadge = (status: string) => {
     const baseClasses = "px-3 py-1 rounded-full text-xs font-medium";
@@ -338,6 +375,23 @@ const AdminDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Dashboard Overview Shortcut Button */}
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg ${
+                  activeTab === 'overview'
+                    ? 'bg-blue-700 text-white shadow-lg'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+                title="Go to Dashboard Overview"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+                {activeTab === 'overview' && (
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                )}
+              </button>
+              
               <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg">
                 <Bell className="h-5 w-5" />
               </button>
@@ -407,67 +461,107 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-gray-600">Welcome back, {adminUser?.username}! Here's what's happening today.</p>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                {/* Enhanced Clickable Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                  {/* Total Members - Clickable to Members Tab */}
+                  <button
+                    onClick={() => setActiveTab('registrations')}
+                    className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow-lg border border-blue-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
+                  >
                     <div className="flex items-center">
-                      <div className="p-3 bg-blue-100 rounded-lg">
-                        <Users className="h-6 w-6 text-blue-600" />
+                      <div className="p-4 bg-blue-500 rounded-xl shadow-md group-hover:bg-blue-600 transition-colors duration-300">
+                        <Users className="h-8 w-8 text-white" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Total Members</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalMembers}</p>
+                        <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Total Members</p>
+                        <p className="text-3xl font-bold text-blue-900">{stats.totalMembers}</p>
+                        <p className="text-xs text-blue-600 mt-1">All registered members</p>
+                        <p className="text-xs text-blue-500 mt-2 group-hover:text-blue-700">Click to view →</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                  {/* Pending Members - Clickable to Members Tab with Pending Filter */}
+                  <button
+                    onClick={() => {
+                      setActiveTab('registrations');
+                      setSearchTerm('');
+                    }}
+                    className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-6 rounded-xl shadow-lg border border-yellow-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
+                  >
                     <div className="flex items-center">
-                      <div className="p-3 bg-yellow-100 rounded-lg">
-                        <Clock className="h-6 w-6 text-yellow-600" />
+                      <div className="p-4 bg-yellow-500 rounded-xl shadow-md group-hover:bg-yellow-600 transition-colors duration-300">
+                        <Clock className="h-8 w-8 text-white" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Pending Members</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.pendingMembers}</p>
+                        <p className="text-sm font-semibold text-yellow-700 uppercase tracking-wide">Pending Members</p>
+                        <p className="text-3xl font-bold text-yellow-900">{stats.pendingMembers}</p>
+                        <p className="text-xs text-yellow-600 mt-1">Awaiting approval</p>
+                        <p className="text-xs text-yellow-500 mt-2 group-hover:text-yellow-700">Click to view →</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                  {/* Approved Members - Clickable to Members Tab with Approved Filter */}
+                  <button
+                    onClick={() => {
+                      setActiveTab('registrations');
+                      setSearchTerm('');
+                    }}
+                    className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl shadow-lg border border-green-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
+                  >
                     <div className="flex items-center">
-                      <div className="p-3 bg-green-100 rounded-lg">
-                        <UserCheck className="h-6 w-6 text-green-600" />
+                      <div className="p-4 bg-green-500 rounded-xl shadow-md group-hover:bg-green-600 transition-colors duration-300">
+                        <UserCheck className="h-8 w-8 text-white" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Approved Members</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.approvedMembers}</p>
+                        <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">Approved Members</p>
+                        <p className="text-3xl font-bold text-green-900">{stats.approvedMembers}</p>
+                        <p className="text-xs text-green-600 mt-1">Active VIP members</p>
+                        <p className="text-xs text-green-500 mt-2 group-hover:text-green-700">Click to view →</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                  {/* Total Orders - Clickable to Orders Tab */}
+                  <button
+                    onClick={() => setActiveTab('orders')}
+                    className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl shadow-lg border border-purple-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
+                  >
                     <div className="flex items-center">
-                      <div className="p-3 bg-purple-100 rounded-lg">
-                        <FileText className="h-6 w-6 text-purple-600" />
+                      <div className="p-4 bg-purple-500 rounded-xl shadow-md group-hover:bg-purple-600 transition-colors duration-300">
+                        <FileText className="h-8 w-8 text-white" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+                        <p className="text-sm font-semibold text-purple-700 uppercase tracking-wide">Total Orders</p>
+                        <p className="text-3xl font-bold text-purple-900">{stats.totalOrders}</p>
+                        <p className="text-xs text-purple-600 mt-1">All job orders</p>
+                        <p className="text-xs text-purple-500 mt-2 group-hover:text-purple-700">Click to view →</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                  {/* Pending Orders - Clickable to Orders Tab with Pending Filter */}
+                  <button
+                    onClick={() => {
+                      setActiveTab('orders');
+                      setOrderFilter('pending');
+                      setSearchTerm('');
+                    }}
+                    className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl shadow-lg border border-orange-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
+                  >
                     <div className="flex items-center">
-                      <div className="p-3 bg-orange-100 rounded-lg">
-                        <Clock className="h-6 w-6 text-orange-600" />
+                      <div className="p-4 bg-orange-500 rounded-xl shadow-md group-hover:bg-orange-600 transition-colors duration-300">
+                        <Clock className="h-8 w-8 text-white" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Pending Orders</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+                        <p className="text-sm font-semibold text-orange-700 uppercase tracking-wide">Pending Orders</p>
+                        <p className="text-3xl font-bold text-orange-900">{stats.pendingOrders}</p>
+                        <p className="text-xs text-orange-600 mt-1">Awaiting processing</p>
+                        <p className="text-xs text-orange-500 mt-2 group-hover:text-orange-700">Click to view →</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
 
                 {/* Recent Activity */}
@@ -696,7 +790,11 @@ const AdminDashboard: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex space-x-2">
-                                <button className="text-blue-600 hover:text-blue-900" title="View Details">
+                                <button
+                                  onClick={() => handleMemberClick(reg)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                  title="View Details"
+                                >
                                   <Eye className="h-4 w-4" />
                                 </button>
                               </div>
@@ -713,65 +811,217 @@ const AdminDashboard: React.FC = () => {
             {/* Orders Tab */}
             {activeTab === 'orders' && (
               <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Order Management</h2>
-                    <p className="text-gray-600">Track and manage printing job orders</p>
-                  </div>
-                  <div className="mt-4 sm:mt-0 flex space-x-3">
-                    {selectedFiles.length > 0 && (
-                      <button 
-                        onClick={bulkDownloadFiles}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                      >
-                        <FileDown className="h-4 w-4 mr-2" />
-                        Bulk Download ({selectedFiles.length})
+                {/* Enhanced Header */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Order Management</h2>
+                      <p className="text-gray-600">Track and manage printing job orders</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      {selectedFiles.length > 0 && (
+                        <>
+                          <button 
+                            onClick={bulkDownloadFiles}
+                            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 transform hover:scale-105 shadow-md"
+                          >
+                            <FileDown className="h-4 w-4 mr-2" />
+                            Bulk Download ({selectedFiles.length})
+                          </button>
+                          <button 
+                            onClick={() => setShowBulkDeleteConfirm(true)}
+                            className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 transform hover:scale-105 shadow-md"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Bulk Delete ({selectedFiles.length})
+                          </button>
+                        </>
+                      )}
+                      <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 transform hover:scale-105 shadow-md">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export Data
                       </button>
-                    )}
-                    <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export Data
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Search and Filter */}
-                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search orders..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
+                {/* Enhanced Search and Filter */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="p-6">
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      {/* Search Bar */}
+                      <div className="flex-1">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Search orders by number, customer, or status..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Enhanced Filter Categories */}
+                    <div className="mt-6">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-4">Filter by Status</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {/* All Orders Filter */}
+                        <button
+                          onClick={() => setOrderFilter('all')}
+                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
+                            orderFilter === 'all'
+                              ? 'border-blue-500 bg-blue-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            orderFilter === 'all' ? 'bg-blue-500' : 'bg-gray-200'
+                          }`}>
+                            <span className="text-xs font-bold text-white">{orders.length}</span>
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            orderFilter === 'all' ? 'text-blue-700' : 'text-gray-600'
+                          }`}>All Orders</span>
+                        </button>
+
+                        {/* Pending Filter */}
+                        <button
+                          onClick={() => setOrderFilter('pending')}
+                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
+                            orderFilter === 'pending'
+                              ? 'border-orange-500 bg-orange-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            orderFilter === 'pending' ? 'bg-orange-500' : 'bg-orange-100'
+                          }`}>
+                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'pending').length}</span>
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            orderFilter === 'pending' ? 'text-orange-700' : 'text-gray-600'
+                          }`}>Pending</span>
+                        </button>
+
+                        {/* In Progress Filter */}
+                        <button
+                          onClick={() => setOrderFilter('in_progress')}
+                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
+                            orderFilter === 'in_progress'
+                              ? 'border-blue-500 bg-blue-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            orderFilter === 'in_progress' ? 'bg-blue-500' : 'bg-blue-100'
+                          }`}>
+                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'in_progress').length}</span>
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            orderFilter === 'in_progress' ? 'text-blue-700' : 'text-gray-600'
+                          }`}>In Progress</span>
+                        </button>
+
+                        {/* Ready Filter */}
+                        <button
+                          onClick={() => setOrderFilter('ready')}
+                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
+                            orderFilter === 'ready'
+                              ? 'border-yellow-500 bg-yellow-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            orderFilter === 'ready' ? 'bg-yellow-500' : 'bg-yellow-100'
+                          }`}>
+                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'ready').length}</span>
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            orderFilter === 'ready' ? 'text-yellow-700' : 'text-gray-600'
+                          }`}>Ready</span>
+                        </button>
+
+                        {/* Completed Filter */}
+                        <button
+                          onClick={() => setOrderFilter('completed')}
+                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
+                            orderFilter === 'completed'
+                              ? 'border-green-500 bg-green-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            orderFilter === 'completed' ? 'bg-green-500' : 'bg-green-100'
+                          }`}>
+                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'completed').length}</span>
+                          </div>
+                          <span className={`text-xs font-semibold ${
+                            orderFilter === 'completed' ? 'text-green-700' : 'text-gray-600'
+                          }`}>Completed</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Results Summary */}
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">
+                          Showing <span className="font-semibold text-gray-900">{filteredOrders.length}</span> of{' '}
+                          <span className="font-semibold text-gray-900">{orders.length}</span> orders
+                          {orderFilter !== 'all' && (
+                            <span className="ml-2 text-blue-600">• Filtered by: {orderFilter.replace('_', ' ')}</span>
+                          )}
+                        </span>
+                        {orderFilter !== 'all' && (
+                          <button
+                            onClick={() => setOrderFilter('all')}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            Clear Filter
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Orders Table */}
+                {/* Enhanced Orders Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  {/* Table Header with Filter Info */}
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {orderFilter === 'all' ? 'All Orders' : `${orderFilter.replace('_', ' ').toUpperCase()} Orders`}
+                        </h3>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {filteredOrders.length} orders
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-gray-300"
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedFiles(filteredOrders.map(o => o.id));
+                            } else {
+                              setSelectedFiles([]);
+                            }
+                          }}
+                        />
+                        <span className="text-sm text-gray-600">Select All</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <input 
-                              type="checkbox" 
-                              className="rounded border-gray-300"
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedFiles(orders.map(o => o.id));
-                                } else {
-                                  setSelectedFiles([]);
-                                }
-                              }}
-                            />
-                          </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
@@ -782,19 +1032,21 @@ const AdminDashboard: React.FC = () => {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {filteredOrders.map((order) => (
-                          <tr key={order.id} className="hover:bg-gray-50">
+                          <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-200 group">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <input 
-                                type="checkbox" 
-                                className="rounded border-gray-300"
-                                checked={selectedFiles.includes(order.id)}
-                                onChange={() => toggleFileSelection(order.id)}
-                              />
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{order.job_order_number}</div>
-                              <div className="text-sm text-gray-500">{order.delivery_type}</div>
-                              <div className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()}</div>
+                              <div className="flex items-center space-x-3">
+                                <input 
+                                  type="checkbox" 
+                                  className="rounded border-gray-300"
+                                  checked={selectedFiles.includes(order.id)}
+                                  onChange={() => toggleFileSelection(order.id)}
+                                />
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{order.job_order_number}</div>
+                                  <div className="text-sm text-gray-500 capitalize">{order.delivery_type}</div>
+                                  <div className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()}</div>
+                                </div>
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{order.vip_member?.full_name || 'Unknown'}</div>
@@ -879,6 +1131,13 @@ const AdminDashboard: React.FC = () => {
                                 >
                                   <FileDown className="h-4 w-4" />
                                 </button>
+                                <button
+                                  onClick={() => setDeleteConfirmOrder(order)}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Delete Order"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -886,6 +1145,32 @@ const AdminDashboard: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Empty State */}
+                  {filteredOrders.length === 0 && (
+                    <div className="text-center py-12">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                        <FileText className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {orderFilter === 'all' ? 'No orders found' : `No ${orderFilter.replace('_', ' ')} orders`}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {orderFilter === 'all' 
+                          ? 'There are no job orders in the system yet.'
+                          : `There are currently no orders with "${orderFilter.replace('_', ' ')}" status.`
+                        }
+                      </p>
+                      {orderFilter !== 'all' && (
+                        <button
+                          onClick={() => setOrderFilter('all')}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          View All Orders
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1018,7 +1303,7 @@ const AdminDashboard: React.FC = () => {
             <div className="p-6">
               {/* Member Info */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Full Name</label>
                     <p className="text-sm text-gray-900">{selectedMember.full_name}</p>
@@ -1026,6 +1311,10 @@ const AdminDashboard: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">VIP ID</label>
                     <p className="text-sm text-gray-900">{selectedMember.unique_id}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Address</label>
+                    <p className="text-sm text-gray-900">{selectedMember.address}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -1043,6 +1332,40 @@ const AdminDashboard: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Status</label>
                     <span className={getStatusBadge(selectedMember.status)}>{selectedMember.status}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Uploaded IDs */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h5 className="text-sm font-semibold text-gray-900 mb-3">Uploaded IDs</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  {selectedMember.student_id_file && (
+                    <div>
+                      <label className="block text-gray-700">Student ID</label>
+                      <p className="text-gray-900 break-all">{selectedMember.student_id_file}</p>
+                    </div>
+                  )}
+                  {selectedMember.senior_id_file && (
+                    <div>
+                      <label className="block text-gray-700">Senior ID</label>
+                      <p className="text-gray-900 break-all">{selectedMember.senior_id_file}</p>
+                    </div>
+                  )}
+                  {selectedMember.pwd_id_file && (
+                    <div>
+                      <label className="block text-gray-700">PWD ID</label>
+                      <p className="text-gray-900 break-all">{selectedMember.pwd_id_file}</p>
+                    </div>
+                  )}
+                  {selectedMember.verification_id_file && (
+                    <div>
+                      <label className="block text-gray-700">Verification ID</label>
+                      <p className="text-gray-900 break-all">{selectedMember.verification_id_file}</p>
+                    </div>
+                  )}
+                  {!selectedMember.student_id_file && !selectedMember.senior_id_file && !selectedMember.pwd_id_file && !selectedMember.verification_id_file && (
+                    <p className="text-gray-500">No uploaded IDs available.</p>
+                  )}
                 </div>
               </div>
 
@@ -1117,6 +1440,74 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-sm">This member hasn't submitted any orders yet.</p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order Confirmation Modal */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Order
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete order <span className="font-semibold">{deleteConfirmOrder.job_order_number}</span>? 
+                This action cannot be undone.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setDeleteConfirmOrder(null)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteOrder(deleteConfirmOrder)}
+                  className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Multiple Orders
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete <span className="font-semibold">{selectedFiles.length}</span> selected orders? 
+                This action cannot be undone.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(false)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete All
+                </button>
               </div>
             </div>
           </div>

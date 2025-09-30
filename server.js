@@ -4,7 +4,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { Pool } from 'pg';
-import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,161 +72,7 @@ loadData();
 //   port: process.env.DB_PORT || 5432,
 // });
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'cresencioprintingservices@gmail.com',
-    pass: process.env.EMAIL_PASS || 'your-app-password-here' // Use App Password for Gmail
-  }
-});
-
-// Email templates
-const emailTemplates = {
-  orderConfirmation: (orderData) => ({
-    subject: `Order Confirmation - ${orderData.job_order_number}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
-          <p style="color: #f0f0f0; margin: 5px 0 0 0;">Order Confirmation</p>
-        </div>
-        <div style="padding: 30px; background: #f9f9f9;">
-          <h2 style="color: #333; margin-top: 0;">Thank you for your order!</h2>
-          <p>Dear ${orderData.vip_member_name},</p>
-          <p>Your print job has been successfully submitted. Here are the details:</p>
-          
-          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #667eea; margin-top: 0;">Order Details</h3>
-            <p><strong>Order Number:</strong> ${orderData.job_order_number}</p>
-            <p><strong>Delivery Type:</strong> ${orderData.delivery_type}</p>
-            <p><strong>Paper Sizes:</strong> ${orderData.paper_sizes.join(', ')}</p>
-            <p><strong>Number of Copies:</strong> ${orderData.number_of_copies}</p>
-            ${orderData.instructions ? `<p><strong>Instructions:</strong> ${orderData.instructions}</p>` : ''}
-            ${orderData.pickup_schedule ? `<p><strong>Pickup Schedule:</strong> ${new Date(orderData.pickup_schedule).toLocaleString()}</p>` : ''}
-            ${orderData.receiver_name ? `<p><strong>Receiver:</strong> ${orderData.receiver_name}</p>` : ''}
-            ${orderData.receiver_address ? `<p><strong>Delivery Address:</strong> ${orderData.receiver_address}</p>` : ''}
-          </div>
-          
-          <p>We'll process your order and notify you when it's ready for pickup or delivery.</p>
-          <p>If you have any questions, please contact us at:</p>
-          <p>📧 Email: cresencioprintingservices@gmail.com<br>
-          📞 Phone: (083)887-1606</p>
-          
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="http://localhost:3000/profile" style="background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">View Order Status</a>
-          </div>
-        </div>
-        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
-        </div>
-      </div>
-    `
-  }),
-  
-  vipRegistration: (vipData) => ({
-    subject: `VIP Registration Confirmation - ${vipData.unique_id}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
-          <p style="color: #f0f0f0; margin: 5px 0 0 0;">VIP Registration Confirmation</p>
-        </div>
-        <div style="padding: 30px; background: #f9f9f9;">
-          <h2 style="color: #333; margin-top: 0;">Welcome to our VIP program!</h2>
-          <p>Dear ${vipData.full_name},</p>
-          <p>Thank you for registering for our VIP program. Your registration has been received and is pending approval.</p>
-          
-          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #667eea; margin-top: 0;">Your VIP Details</h3>
-            <p><strong>VIP ID:</strong> ${vipData.unique_id}</p>
-            <p><strong>Full Name:</strong> ${vipData.full_name}</p>
-            <p><strong>Email:</strong> ${vipData.email}</p>
-            <p><strong>Category:</strong> ${vipData.customer_category}</p>
-            <p><strong>Status:</strong> Pending Approval</p>
-          </div>
-          
-          <p>Once approved, you'll be able to:</p>
-          <ul>
-            <li>Skip the line with priority service</li>
-            <li>Submit orders online through our VIP portal</li>
-            <li>Track your orders in real-time</li>
-            <li>Receive exclusive notifications and updates</li>
-          </ul>
-          
-          <p>We'll notify you via email once your VIP status is approved.</p>
-          <p>If you have any questions, please contact us at:</p>
-          <p>📧 Email: cresencioprintingservices@gmail.com<br>
-          📞 Phone: (083)887-1606</p>
-        </div>
-        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
-        </div>
-      </div>
-    `
-  }),
-  
-  vipApproval: (vipData) => ({
-    subject: `VIP Status Approved - ${vipData.unique_id}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Cresencio Printing Services</h1>
-          <p style="color: #f0f0f0; margin: 5px 0 0 0;">VIP Status Approved!</p>
-        </div>
-        <div style="padding: 30px; background: #f9f9f9;">
-          <h2 style="color: #333; margin-top: 0;">Congratulations! Your VIP status has been approved!</h2>
-          <p>Dear ${vipData.full_name},</p>
-          <p>Great news! Your VIP membership has been approved. You can now enjoy all the benefits of our VIP program.</p>
-          
-          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="color: #10b981; margin-top: 0;">Your VIP Details</h3>
-            <p><strong>VIP ID:</strong> ${vipData.unique_id}</p>
-            <p><strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">APPROVED</span></p>
-          </div>
-          
-          <p>You can now:</p>
-          <ul>
-            <li>Login to your VIP account using your VIP ID: <strong>${vipData.unique_id}</strong></li>
-            <li>Submit orders online through our VIP portal</li>
-            <li>Track your orders in real-time</li>
-            <li>Enjoy priority service and faster processing</li>
-          </ul>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="http://localhost:3000/login" style="background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Login to VIP Portal</a>
-          </div>
-          
-          <p>If you have any questions, please contact us at:</p>
-          <p>📧 Email: cresencioprintingservices@gmail.com<br>
-          📞 Phone: (083)887-1606</p>
-        </div>
-        <div style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p>© 2024 Cresencio Printing Services. All rights reserved.</p>
-        </div>
-      </div>
-    `
-  })
-};
-
-// Email sending function
-const sendEmail = async (to, template) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'cresencioprintingservices@gmail.com',
-      to: to,
-      subject: template.subject,
-      html: template.html
-    };
-    
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', result.messageId);
-    return { success: true, messageId: result.messageId };
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return { success: false, error: error.message };
-  }
-};
+// Email features removed: no nodemailer, templates, or email sending
 
 // Middleware
 app.use(cors());
@@ -336,19 +181,10 @@ app.post('/api/vip-members/register', upload.fields([
     vipMembers.push(newMember);
     saveData(); // Save to persistent storage
 
-    // Send confirmation email
-    const emailResult = await sendEmail(email, emailTemplates.vipRegistration({
-      unique_id: newMember.unique_id,
-      full_name: full_name,
-      email: email,
-      customer_category: customer_category
-    }));
-
     res.json({
       success: true,
       data: { unique_id: newMember.unique_id },
-      message: 'Registration successful',
-      emailSent: emailResult.success
+      message: 'Registration successful'
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -511,20 +347,7 @@ app.post('/api/job-orders', async (req, res) => {
     // Get VIP member details for email
     const vipMember = vipMembers.find(member => member.id === parseInt(vip_member_id));
 
-    if (vipMember) {
-      // Send order confirmation email
-      const emailResult = await sendEmail(vipMember.email, emailTemplates.orderConfirmation({
-        job_order_number: newOrder.job_order_number,
-        vip_member_name: vipMember.full_name,
-        delivery_type: delivery_type,
-        paper_sizes: newOrder.paper_sizes,
-        number_of_copies: number_of_copies,
-        instructions: instructions,
-        pickup_schedule: pickup_schedule,
-        receiver_name: receiver_name,
-        receiver_address: receiver_address
-      }));
-    }
+    // Email notifications removed
 
     res.json({
       success: true,
@@ -621,15 +444,7 @@ app.patch('/api/admin/vip-members/:id/status', async (req, res) => {
     vipMember.updated_at = new Date().toISOString();
     saveData(); // Save to persistent storage
 
-    // Send approval email if status is approved
-    if (status === 'approved') {
-      const emailResult = await sendEmail(vipMember.email, emailTemplates.vipApproval({
-        unique_id: vipMember.unique_id,
-        full_name: vipMember.full_name,
-        email: vipMember.email,
-        customer_category: vipMember.customer_category
-      }));
-    }
+    // Email notifications removed for status updates
 
     res.json({
       success: true,

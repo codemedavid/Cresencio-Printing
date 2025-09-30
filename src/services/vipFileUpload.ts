@@ -34,22 +34,6 @@ export class VipFileUploadService {
         return validationResult;
       }
 
-      // Check if bucket exists
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      
-      if (bucketError) {
-        console.error('Error checking buckets:', bucketError);
-        // Fallback: create a data URL for now
-        return this.createDataUrl(file);
-      }
-      
-      const bucketExists = buckets.some(bucket => bucket.name === this.BUCKET_NAME);
-      
-      if (!bucketExists) {
-        console.warn(`Storage bucket '${this.BUCKET_NAME}' does not exist. Creating data URL instead.`);
-        return this.createDataUrl(file);
-      }
-
       // Generate unique filename
       const timestamp = Date.now();
       const fileExtension = file.name.split('.').pop();
@@ -65,8 +49,10 @@ export class VipFileUploadService {
 
       if (error) {
         console.error('Supabase upload error:', error);
-        // Fallback: create a data URL for now
-        return this.createDataUrl(file);
+        return {
+          success: false,
+          error: `Upload failed: ${error.message}`
+        };
       }
 
       // Get public URL
@@ -81,31 +67,11 @@ export class VipFileUploadService {
 
     } catch (error) {
       console.error('File upload error:', error);
-      // Fallback: create a data URL for now
-      return this.createDataUrl(file);
+      return {
+        success: false,
+        error: 'An unexpected error occurred during upload'
+      };
     }
-  }
-
-  /**
-   * Create a data URL as fallback when storage is not available
-   */
-  private static createDataUrl(file: File): Promise<FileUploadResult> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve({
-          success: true,
-          url: reader.result as string
-        });
-      };
-      reader.onerror = () => {
-        resolve({
-          success: false,
-          error: 'Failed to read file'
-        });
-      };
-      reader.readAsDataURL(file);
-    });
   }
 
   /**

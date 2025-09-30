@@ -438,6 +438,42 @@ app.post('/api/job-orders', async (req, res) => {
         saveData(); // Save to persistent storage
         vipMember = newVipMember;
         console.log(`Created VIP member with ID: ${vipMember.id}`);
+        
+        // Also create in Supabase if possible (for frontend authentication)
+        try {
+          const { createClient } = require('@supabase/supabase-js');
+          const supabaseUrl = process.env.VITE_SUPABASE_URL;
+          const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+          
+          if (supabaseUrl && supabaseKey) {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            
+            const supabaseData = {
+              unique_id: vip_unique_id,
+              full_name: req.body.vip_name || 'Unknown User',
+              address: req.body.vip_address || 'Not provided',
+              email: req.body.vip_email || 'Not provided',
+              mobile_number: req.body.vip_mobile || 'Not provided',
+              customer_category: req.body.vip_category || 'Regular Customer',
+              school_name: null,
+              senior_id_number: null,
+              pwd_id_number: null,
+              status: 'approved'
+            };
+            
+            const { error } = await supabase
+              .from('vip_accounts')
+              .upsert(supabaseData, { onConflict: 'unique_id' });
+              
+            if (error) {
+              console.warn('Failed to sync VIP member to Supabase:', error.message);
+            } else {
+              console.log('VIP member synced to Supabase successfully');
+            }
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase sync failed (continuing):', supabaseError.message);
+        }
       }
       
       finalVipMemberId = vipMember.id;

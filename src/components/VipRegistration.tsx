@@ -8,7 +8,7 @@ import { User, Mail, Phone, MapPin, GraduationCap, UserCheck, FileText, Upload, 
 
 const VipRegistration: React.FC = () => {
   const navigate = useNavigate();
-  const { addRegistration, error: registrationError } = useVipRegistrations();
+  const { addRegistration, updateMemberByUniqueId, error: registrationError } = useVipRegistrations();
   const [formData, setFormData] = useState<VipRegistrationForm>({
     full_name: '',
     address: '',
@@ -219,10 +219,8 @@ const VipRegistration: React.FC = () => {
       // Wait for all file uploads to complete
       if (fileUploadPromises.length > 0) {
         await Promise.all(fileUploadPromises);
-        
-        // Update the registration with file URLs
-        // Note: This would require an update method in useVipRegistrations hook
-        // For now, we'll just proceed with the registration
+        // Persist uploaded file URLs to the member row so admin can see them
+        await updateMemberByUniqueId(newMember.unique_id, updateData);
       }
       
       // Set the generated ID for display
@@ -465,21 +463,30 @@ const VipRegistration: React.FC = () => {
       <div className="decorative-circle decorative-circle-3"></div>
       
       <div className="max-w-lg mx-auto px-4 relative z-10">
-        <div className="card-modern gradient-border">
-          <div className="card-header text-center fade-in-up">
-            <div className="mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-primary to-accent rounded-3xl mb-6 shadow-2xl floating">
-                <Logo size="md" showText={false} />
+          <div className="card-modern gradient-border">
+          <div className="fade-in-up rounded-2xl p-6 mb-6" style={{background: 'linear-gradient(180deg, #F5F3FF 0%, #FCE7F3 100%)'}}>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-md" style={{backgroundColor: '#7C3AED', color: 'white'}}>
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A7 7 0 0112 15a7 7 0 016.879 2.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </div>
-              <Logo size="lg" />
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">VIP Registration</h1>
+                <p className="text-gray-600 text-lg font-medium">Join our VIP program for priority service</p>
+              </div>
             </div>
-            <h1 className="text-4xl font-bold text-gradient mb-4">VIP Registration</h1>
-            <p className="text-gray-600 text-lg font-medium">
-              Join our VIP program for priority service
-            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+              <div className="rounded-xl border p-5 bg-[#EEF4FF] border-[#D6E4FF]">
+                <h3 className="text-lg font-bold text-gray-700 mb-4">Personal Details</h3>
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Existing fields below */}
+                </div>
+              </div>
+            </div>
             <div>
               <label htmlFor="full_name" className="form-label flex items-center">
                 <User className="w-4 h-4 mr-2 text-gray-600" />

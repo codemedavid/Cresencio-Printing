@@ -15,8 +15,8 @@ import {
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, adminUser, logout, isLoading } = useAdminAuth();
-  const { orders, updateOrderStatus, updateOrderAmount, loadAllOrders, deleteOrder, bulkDeleteOrders } = useJobOrders();
-  const { registrations, updateMemberStatus, bulkUpdateMemberStatus } = useVipRegistrations();
+  const { orders, updateOrderStatus, updateOrderAmount, deleteOrder } = useJobOrders();
+  const { registrations, updateMemberStatus, bulkUpdateMemberStatus, deleteRegistration } = useVipRegistrations();
   const [activeTab, setActiveTab] = useState<'overview' | 'registrations' | 'orders'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,10 +25,10 @@ const AdminDashboard: React.FC = () => {
   const [editingAmount, setEditingAmount] = useState<number | null>(null);
   const [tempAmount, setTempAmount] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<number[]>([]);
-  const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
-  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
-  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<JobOrder | null>(null);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [memberStatusFilter, setMemberStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [memberCategoryFilter, setMemberCategoryFilter] = useState<'all' | 'Student' | 'Senior Citizen' | 'Regular Customer' | 'PWD'>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
   
   // Redirect if not authenticated (but wait for loading to complete)
   useEffect(() => {
@@ -39,16 +39,9 @@ const AdminDashboard: React.FC = () => {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
-  // Load orders from server when component mounts
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadAllOrders();
-    }
-  }, [isAuthenticated, loadAllOrders]);
 
 
-
-  // Statistics - Dynamic data from actual orders and registrations
+  // Statistics
   const stats = {
     totalMembers: registrations.length,
     pendingMembers: registrations.filter(r => r.status === 'pending').length,
@@ -57,7 +50,6 @@ const AdminDashboard: React.FC = () => {
     pendingOrders: orders.filter(o => o.status === 'pending').length,
     completedOrders: orders.filter(o => o.status === 'completed').length,
     inProgressOrders: orders.filter(o => o.status === 'in_progress').length,
-    readyOrders: orders.filter(o => o.status === 'ready').length,
   };
 
   const handleLogout = () => {
@@ -65,9 +57,9 @@ const AdminDashboard: React.FC = () => {
     navigate('/');
   };
 
-  const handleUpdateMemberStatus = (id: number, status: MemberStatus) => {
+  const handleUpdateMemberStatus = (uniqueId: string, status: MemberStatus) => {
     // Find the member to get their name for confirmation
-    const member = registrations.find(reg => reg.id === id);
+    const member = registrations.find(reg => reg.unique_id === uniqueId);
     const memberName = member?.full_name || 'Unknown Member';
     
     // Show confirmation dialog
@@ -76,7 +68,7 @@ const AdminDashboard: React.FC = () => {
     );
     
     if (confirmed) {
-      updateMemberStatus(id, status);
+      updateMemberStatus(uniqueId, status);
     }
   };
 
@@ -93,31 +85,20 @@ const AdminDashboard: React.FC = () => {
     const amount = parseFloat(tempAmount);
     if (!isNaN(amount) && amount >= 0) {
       updateOrderAmount(orderId, amount);
+      // Persist immediately for customer views
+      try {
+        const stored = localStorage.getItem('cresencio_job_orders');
+        const ordersArr = stored ? JSON.parse(stored) : [];
+        const updated = ordersArr.map((o: any) => o.id === orderId ? { ...o, total_amount_to_pay: amount, updated_at: new Date().toISOString() } : o);
+        localStorage.setItem('cresencio_job_orders', JSON.stringify(updated));
+        // Trigger storage event for same-tab listeners
+        window.dispatchEvent(new StorageEvent('storage', { key: 'cresencio_job_orders', newValue: JSON.stringify(updated) }));
+      } catch (e) {
+        console.error('Error persisting order amount to storage:', e);
+      }
     }
     setEditingAmount(null);
     setTempAmount('');
-  };
-
-  const handleDeleteOrder = async (order: JobOrder) => {
-    const success = await deleteOrder(order.id);
-    if (success) {
-      setDeleteConfirmOrder(null);
-      // Show success message
-      console.log(`Order ${order.job_order_number} deleted successfully`);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    const selectedOrderIds = selectedFiles;
-    const result = await bulkDeleteOrders(selectedOrderIds);
-    
-    if (result.success) {
-      setSelectedFiles([]);
-      setShowBulkDeleteConfirm(false);
-      console.log(`Successfully deleted ${result.deletedCount} orders`);
-    } else {
-      console.error('Bulk delete failed:', result.error);
-    }
   };
 
   const cancelEditingAmount = () => {
@@ -256,6 +237,28 @@ const AdminDashboard: React.FC = () => {
     console.log(`Successfully downloaded ${downloadedCount} files from ${selectedOrders.length} orders`);
   };
 
+  const bulkDeleteOrders = () => {
+    if (selectedFiles.length === 0) return;
+    const confirmed = window.confirm(`Delete ${selectedFiles.length} selected order(s)? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    // Delete from in-memory state
+    selectedFiles.forEach((id) => deleteOrder(id));
+
+    // Persist to localStorage and notify other tabs
+    try {
+      const stored = localStorage.getItem('cresencio_job_orders');
+      const ordersArr = stored ? JSON.parse(stored) : [];
+      const updated = ordersArr.filter((o: any) => !selectedFiles.includes(o.id));
+      localStorage.setItem('cresencio_job_orders', JSON.stringify(updated));
+      window.dispatchEvent(new StorageEvent('storage', { key: 'cresencio_job_orders', newValue: JSON.stringify(updated) }));
+    } catch (e) {
+      console.error('Error persisting bulk delete to storage:', e);
+    }
+
+    setSelectedFiles([]);
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -273,16 +276,16 @@ const AdminDashboard: React.FC = () => {
     return '📎';
   };
 
-  const toggleMemberSelection = (memberId: number) => {
+  const toggleMemberSelection = (memberUniqueId: string) => {
     setSelectedMembers(prev => 
-      prev.includes(memberId) 
-        ? prev.filter(id => id !== memberId)
-        : [...prev, memberId]
+      prev.includes(memberUniqueId as any) 
+        ? prev.filter(id => id !== (memberUniqueId as any))
+        : [...prev, (memberUniqueId as any)]
     );
   };
 
   const handleBulkUpdateMemberStatus = (status: MemberStatus) => {
-    const selectedMembersList = registrations.filter(reg => selectedMembers.includes(reg.id));
+    const selectedMembersList = registrations.filter(reg => (selectedMembers as any[]).includes(reg.unique_id as any));
     const memberNames = selectedMembersList.map(reg => `${reg.full_name} (${reg.unique_id})`).join(', ');
     
     const confirmed = window.confirm(
@@ -290,33 +293,55 @@ const AdminDashboard: React.FC = () => {
     );
     
     if (confirmed) {
-      bulkUpdateMemberStatus(selectedMembers, status);
-      setSelectedMembers([]);
+      bulkUpdateMemberStatus((selectedMembers as any[]), status);
+      setSelectedMembers([] as any);
     }
   };
 
-  const getMemberJobOrders = (memberId: number) => {
-    return orders.filter(order => order.vip_member_id === memberId);
+  const handleBulkDeleteMembers = async () => {
+    if (selectedMembers.length === 0) return;
+    const selectedMembersList = registrations.filter(reg => (selectedMembers as any[]).includes(reg.unique_id as any));
+    const memberNames = selectedMembersList.map(reg => `${reg.full_name} (${reg.unique_id})`).join(', ');
+    const confirmed = window.confirm(
+      `Are you sure you want to DELETE ${selectedMembersList.length} member(s)?\n\nMembers: ${memberNames}`
+    );
+    if (!confirmed) return;
+    // Delete sequentially to keep it simple; can be Promise.all if preferred
+    for (const m of selectedMembersList) {
+      const res = await deleteRegistration(m.unique_id);
+      if (!res.success) {
+        alert(res.error || `Failed to delete ${m.full_name}`);
+        break;
+      }
+    }
+    setSelectedMembers([] as any);
+  };
+
+  const getMemberJobOrders = (memberUniqueId: string) => {
+    return orders.filter(order => order.vip_member?.unique_id === memberUniqueId);
   };
 
   const handleMemberClick = (member: VipMember) => {
     setSelectedMember(member);
   };
 
-  const filteredRegistrations = registrations.filter(reg =>
-    reg.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.unique_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reg.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRegistrations = registrations.filter(reg => {
+    const matchesSearch =
+      reg.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.unique_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reg.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = memberStatusFilter === 'all' || reg.status === memberStatusFilter;
+    const matchesCategory = memberCategoryFilter === 'all' || reg.customer_category === memberCategoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.job_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      order.job_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (order.vip_member?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.status.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesFilter = orderFilter === 'all' || order.status === orderFilter;
-    
-    return matchesSearch && matchesFilter;
+    const matchesStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   const getStatusBadge = (status: string) => {
@@ -375,23 +400,6 @@ const AdminDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {/* Dashboard Overview Shortcut Button */}
-              <button
-                onClick={() => setActiveTab('overview')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg ${
-                  activeTab === 'overview'
-                    ? 'bg-blue-700 text-white shadow-lg'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-                title="Go to Dashboard Overview"
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-                {activeTab === 'overview' && (
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                )}
-              </button>
-              
               <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg">
                 <Bell className="h-5 w-5" />
               </button>
@@ -436,9 +444,9 @@ const AdminDashboard: React.FC = () => {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id as any)}
-                  className={`w-full flex items-center px-4 py-3 text-left rounded-lg transition-colors ${
+                  className={`w-full flex items-center px-4 py-3 text-left rounded-xl transition-all ${
                     activeTab === item.id
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                      ? 'bg-blue-50 text-blue-700 shadow-sm'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
@@ -461,112 +469,107 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-gray-600">Welcome back, {adminUser?.username}! Here's what's happening today.</p>
                 </div>
 
-                {/* Enhanced Clickable Stats Grid */}
+                {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                  {/* Total Members - Clickable to Members Tab */}
-                  <button
-                    onClick={() => setActiveTab('registrations')}
-                    className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow-lg border border-blue-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
-                  >
+                  <div className="p-6 rounded-2xl border shadow-sm" style={{background:'#EEF4FF', borderColor:'#D6E4FF'}}>
                     <div className="flex items-center">
-                      <div className="p-4 bg-blue-500 rounded-xl shadow-md group-hover:bg-blue-600 transition-colors duration-300">
-                        <Users className="h-8 w-8 text-white" />
+                      <div className="p-3 rounded-xl text-white" style={{background:'#2563EB'}}>
+                        <Users className="h-6 w-6" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Total Members</p>
-                        <p className="text-3xl font-bold text-blue-900">{stats.totalMembers}</p>
-                        <p className="text-xs text-blue-600 mt-1">All registered members</p>
-                        <p className="text-xs text-blue-500 mt-2 group-hover:text-blue-700">Click to view →</p>
+                        <p className="text-sm font-medium text-gray-600">Total Members</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalMembers}</p>
+                        <button
+                          onClick={() => setActiveTab('registrations')}
+                          className="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-blue-700 bg-white/70 hover:bg-white transition"
+                        >
+                          Click to view
+                          <span className="ml-1">→</span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Pending Members - Clickable to Members Tab with Pending Filter */}
-                  <button
-                    onClick={() => {
-                      setActiveTab('registrations');
-                      setSearchTerm('');
-                    }}
-                    className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-6 rounded-xl shadow-lg border border-yellow-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
-                  >
+                  <div className="p-6 rounded-2xl border shadow-sm" style={{background:'#FEF9C3', borderColor:'#FDE68A'}}>
                     <div className="flex items-center">
-                      <div className="p-4 bg-yellow-500 rounded-xl shadow-md group-hover:bg-yellow-600 transition-colors duration-300">
-                        <Clock className="h-8 w-8 text-white" />
+                      <div className="p-3 rounded-xl text-white" style={{background:'#F59E0B'}}>
+                        <Clock className="h-6 w-6" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-semibold text-yellow-700 uppercase tracking-wide">Pending Members</p>
-                        <p className="text-3xl font-bold text-yellow-900">{stats.pendingMembers}</p>
-                        <p className="text-xs text-yellow-600 mt-1">Awaiting approval</p>
-                        <p className="text-xs text-yellow-500 mt-2 group-hover:text-yellow-700">Click to view →</p>
+                        <p className="text-sm font-medium text-gray-600">Pending Members</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.pendingMembers}</p>
+                        <button
+                          onClick={() => setActiveTab('registrations')}
+                          className="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-amber-700 bg-white/70 hover:bg-white transition"
+                        >
+                          Click to view
+                          <span className="ml-1">→</span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Approved Members - Clickable to Members Tab with Approved Filter */}
-                  <button
-                    onClick={() => {
-                      setActiveTab('registrations');
-                      setSearchTerm('');
-                    }}
-                    className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl shadow-lg border border-green-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
-                  >
+                  <div className="p-6 rounded-2xl border shadow-sm" style={{background:'#DCFCE7', borderColor:'#BBF7D0'}}>
                     <div className="flex items-center">
-                      <div className="p-4 bg-green-500 rounded-xl shadow-md group-hover:bg-green-600 transition-colors duration-300">
-                        <UserCheck className="h-8 w-8 text-white" />
+                      <div className="p-3 rounded-xl text-white" style={{background:'#16A34A'}}>
+                        <UserCheck className="h-6 w-6" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">Approved Members</p>
-                        <p className="text-3xl font-bold text-green-900">{stats.approvedMembers}</p>
-                        <p className="text-xs text-green-600 mt-1">Active VIP members</p>
-                        <p className="text-xs text-green-500 mt-2 group-hover:text-green-700">Click to view →</p>
+                        <p className="text-sm font-medium text-gray-600">Approved Members</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.approvedMembers}</p>
+                        <button
+                          onClick={() => setActiveTab('registrations')}
+                          className="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-green-700 bg-white/70 hover:bg-white transition"
+                        >
+                          Click to view
+                          <span className="ml-1">→</span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Total Orders - Clickable to Orders Tab */}
-                  <button
-                    onClick={() => setActiveTab('orders')}
-                    className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl shadow-lg border border-purple-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
-                  >
+                  <div className="p-6 rounded-2xl border shadow-sm" style={{background:'#F3E8FF', borderColor:'#E9D5FF'}}>
                     <div className="flex items-center">
-                      <div className="p-4 bg-purple-500 rounded-xl shadow-md group-hover:bg-purple-600 transition-colors duration-300">
-                        <FileText className="h-8 w-8 text-white" />
+                      <div className="p-3 rounded-xl text-white" style={{background:'#7C3AED'}}>
+                        <FileText className="h-6 w-6" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-semibold text-purple-700 uppercase tracking-wide">Total Orders</p>
-                        <p className="text-3xl font-bold text-purple-900">{stats.totalOrders}</p>
-                        <p className="text-xs text-purple-600 mt-1">All job orders</p>
-                        <p className="text-xs text-purple-500 mt-2 group-hover:text-purple-700">Click to view →</p>
+                        <p className="text-sm font-medium text-gray-600">Total Orders</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+                        <button
+                          onClick={() => setActiveTab('orders')}
+                          className="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-purple-700 bg-white/70 hover:bg-white transition"
+                        >
+                          Click to view
+                          <span className="ml-1">→</span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Pending Orders - Clickable to Orders Tab with Pending Filter */}
-                  <button
-                    onClick={() => {
-                      setActiveTab('orders');
-                      setOrderFilter('pending');
-                      setSearchTerm('');
-                    }}
-                    className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl shadow-lg border border-orange-200 hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer group text-left w-full"
-                  >
+                  <div className="p-6 rounded-2xl border shadow-sm" style={{background:'#FFEDD5', borderColor:'#FED7AA'}}>
                     <div className="flex items-center">
-                      <div className="p-4 bg-orange-500 rounded-xl shadow-md group-hover:bg-orange-600 transition-colors duration-300">
-                        <Clock className="h-8 w-8 text-white" />
+                      <div className="p-3 rounded-xl text-white" style={{background:'#EA580C'}}>
+                        <Clock className="h-6 w-6" />
                       </div>
                       <div className="ml-4">
-                        <p className="text-sm font-semibold text-orange-700 uppercase tracking-wide">Pending Orders</p>
-                        <p className="text-3xl font-bold text-orange-900">{stats.pendingOrders}</p>
-                        <p className="text-xs text-orange-600 mt-1">Awaiting processing</p>
-                        <p className="text-xs text-orange-500 mt-2 group-hover:text-orange-700">Click to view →</p>
+                        <p className="text-sm font-medium text-gray-600">Pending Orders</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+                        <button
+                          onClick={() => setActiveTab('orders')}
+                          className="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-orange-700 bg-white/70 hover:bg-white transition"
+                        >
+                          Click to view
+                          <span className="ml-1">→</span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 </div>
 
                 {/* Recent Activity */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
                     <div className="p-6 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-gray-900">Recent VIP Registrations</h3>
                     </div>
@@ -585,7 +588,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
                     <div className="p-6 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-gray-900">Recent Job Orders</h3>
                     </div>
@@ -675,9 +678,9 @@ const AdminDashboard: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">VIP Member Management</h2>
                     <p className="text-gray-600">Review and manage VIP member registrations</p>
                   </div>
-                  <div className="mt-4 sm:mt-0 flex space-x-3">
+                  <div className="mt-4 sm:mt-0 flex flex-wrap gap-2">
                     {selectedMembers.length > 0 && (
-                      <div className="flex space-x-2">
+                      <div className="flex flex-wrap gap-2">
                         <button 
                           onClick={() => handleBulkUpdateMemberStatus('approved')}
                           className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -692,6 +695,13 @@ const AdminDashboard: React.FC = () => {
                           <XCircle className="h-4 w-4 mr-1" />
                           Reject ({selectedMembers.length})
                         </button>
+                        <button
+                          onClick={handleBulkDeleteMembers}
+                          className="inline-flex items-center px-3 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 transition-colors text-sm"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete Selected ({selectedMembers.length})
+                        </button>
                       </div>
                     )}
                     <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
@@ -703,7 +713,7 @@ const AdminDashboard: React.FC = () => {
 
                 {/* Search and Filter */}
                 <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
                     <div className="flex-1">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -716,11 +726,38 @@ const AdminDashboard: React.FC = () => {
                         />
                       </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600">Status:</label>
+                      <select
+                        value={memberStatusFilter}
+                        onChange={(e) => setMemberStatusFilter(e.target.value as any)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600">Category:</label>
+                      <select
+                        value={memberCategoryFilter}
+                        onChange={(e) => setMemberCategoryFilter(e.target.value as any)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="all">All</option>
+                        <option value="Regular Customer">Regular Customer</option>
+                        <option value="Student">Student</option>
+                        <option value="Senior Citizen">Senior Citizen</option>
+                        <option value="PWD">PWD</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 {/* Registrations Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
@@ -731,7 +768,7 @@ const AdminDashboard: React.FC = () => {
                               className="rounded border-gray-300"
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedMembers(registrations.map(r => r.id));
+                                  setSelectedMembers(registrations.map(r => r.unique_id));
                                 } else {
                                   setSelectedMembers([]);
                                 }
@@ -741,6 +778,7 @@ const AdminDashboard: React.FC = () => {
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Member</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IDs</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -752,8 +790,8 @@ const AdminDashboard: React.FC = () => {
                               <input 
                                 type="checkbox" 
                                 className="rounded border-gray-300"
-                                checked={selectedMembers.includes(reg.id)}
-                                onChange={() => toggleMemberSelection(reg.id)}
+                                checked={(selectedMembers as any[]).includes(reg.unique_id as any)}
+                                onChange={() => toggleMemberSelection(reg.unique_id)}
                               />
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -775,11 +813,30 @@ const AdminDashboard: React.FC = () => {
                               {reg.customer_category}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2 max-w-xs flex-wrap">
+                                {reg.student_id_file && (
+                                  <a href={reg.student_id_file} target="_blank" rel="noreferrer" className="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded-full border border-blue-200 hover:bg-blue-100">Student ID</a>
+                                )}
+                                {reg.senior_id_file && (
+                                  <a href={reg.senior_id_file} target="_blank" rel="noreferrer" className="text-green-700 text-xs bg-green-50 px-2 py-1 rounded-full border border-green-200 hover:bg-green-100">Senior ID</a>
+                                )}
+                                {reg.pwd_id_file && (
+                                  <a href={reg.pwd_id_file} target="_blank" rel="noreferrer" className="text-purple-700 text-xs bg-purple-50 px-2 py-1 rounded-full border border-purple-200 hover:bg-purple-100">PWD ID</a>
+                                )}
+                                {reg.verification_id_file && (
+                                  <a href={reg.verification_id_file} target="_blank" rel="noreferrer" className="text-gray-700 text-xs bg-gray-50 px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-100">Gov't ID</a>
+                                )}
+                                {!reg.student_id_file && !reg.senior_id_file && !reg.pwd_id_file && !reg.verification_id_file && (
+                                  <span className="text-xs text-gray-400">No IDs</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center space-x-2">
                                 <span className={getStatusBadge(reg.status)}>{reg.status}</span>
                                 <select
                                   value={reg.status}
-                                  onChange={(e) => handleUpdateMemberStatus(reg.id, e.target.value as MemberStatus)}
+                                  onChange={(e) => handleUpdateMemberStatus(reg.unique_id, e.target.value as MemberStatus)}
                                   className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ml-2"
                                 >
                                   <option value="pending">Pending</option>
@@ -790,12 +847,26 @@ const AdminDashboard: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex space-x-2">
-                                <button
+                                <button 
                                   onClick={() => handleMemberClick(reg)}
-                                  className="text-blue-600 hover:text-blue-900"
+                                  className="text-blue-600 hover:text-blue-900" 
                                   title="View Details"
                                 >
                                   <Eye className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    const confirmed = window.confirm(`Delete VIP member ${reg.full_name} (${reg.unique_id})? This will remove their registration.`);
+                                    if (!confirmed) return;
+                                    const res = await deleteRegistration(reg.unique_id);
+                                    if (!res.success) {
+                                      alert(res.error || 'Failed to delete member');
+                                    }
+                                  }}
+                                  className="text-red-600 hover:text-red-800"
+                                  title="Delete Member"
+                                >
+                                  <XCircle className="h-4 w-4" />
                                 </button>
                               </div>
                             </td>
@@ -811,217 +882,98 @@ const AdminDashboard: React.FC = () => {
             {/* Orders Tab */}
             {activeTab === 'orders' && (
               <div className="space-y-6">
-                {/* Enhanced Header */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Order Management</h2>
-                      <p className="text-gray-600">Track and manage printing job orders</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Order Management</h2>
+                    <p className="text-gray-600">Track and manage printing job orders</p>
+                  </div>
+                  <div className="mt-4 sm:mt-0 flex flex-wrap gap-3">
+                    {selectedFiles.length > 0 && (
+                      <>
+                        <button 
+                          onClick={bulkDownloadFiles}
+                          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <FileDown className="h-4 w-4 mr-2" />
+                          Bulk Download ({selectedFiles.length})
+                        </button>
+                        <button
+                          onClick={bulkDeleteOrders}
+                          className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Delete Selected ({selectedFiles.length})
+                        </button>
+                      </>
+                    )}
+                    <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export Data
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search and Filter */}
+                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                  <div className="flex flex-col gap-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        aria-label="Search orders"
+                        placeholder="Search orders by number, customer, or status..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                     </div>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      {selectedFiles.length > 0 && (
-                        <>
-                          <button 
-                            onClick={bulkDownloadFiles}
-                            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 transform hover:scale-105 shadow-md"
-                          >
-                            <FileDown className="h-4 w-4 mr-2" />
-                            Bulk Download ({selectedFiles.length})
-                          </button>
-                          <button 
-                            onClick={() => setShowBulkDeleteConfirm(true)}
-                            className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 transform hover:scale-105 shadow-md"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Bulk Delete ({selectedFiles.length})
-                          </button>
-                        </>
-                      )}
-                      <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 transform hover:scale-105 shadow-md">
-                        <Download className="h-4 w-4 mr-2" />
-                        Export Data
-                      </button>
+
+                    {/* Filter by Status Badges */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                      {([
+                        { id: 'all', label: 'All Orders', color: '#2563EB', bg: '#EEF4FF', count: orders.length },
+                        { id: 'pending', label: 'Pending', color: '#F59E0B', bg: '#FEF9C3', count: orders.filter(o => o.status === 'pending').length },
+                        { id: 'in_progress', label: 'In Progress', color: '#60A5FA', bg: '#DBEAFE', count: orders.filter(o => o.status === 'in_progress').length },
+                        { id: 'ready', label: 'Ready', color: '#FACC15', bg: '#FEF9C3', count: orders.filter(o => o.status === 'ready').length },
+                        { id: 'completed', label: 'Completed', color: '#10B981', bg: '#DCFCE7', count: orders.filter(o => o.status === 'completed').length },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setOrderStatusFilter(opt.id as any)}
+                          className={`flex-1 min-w-[180px] px-4 py-4 rounded-2xl border transition ${orderStatusFilter === (opt.id as any) ? 'ring-2 ring-offset-2' : ''}`}
+                          style={{ background: opt.bg, borderColor: opt.bg }}
+                        >
+                          <div className="flex items-center justify-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold mr-2" style={{ background: opt.color }}>
+                              {opt.count}
+                            </span>
+                            <span className="font-medium text-gray-700">{opt.label}</span>
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Enhanced Search and Filter */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex flex-col lg:flex-row gap-6">
-                      {/* Search Bar */}
-                      <div className="flex-1">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder="Search orders by number, customer, or status..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all duration-200"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Enhanced Filter Categories */}
-                    <div className="mt-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-4">Filter by Status</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        {/* All Orders Filter */}
-                        <button
-                          onClick={() => setOrderFilter('all')}
-                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
-                            orderFilter === 'all'
-                              ? 'border-blue-500 bg-blue-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                            orderFilter === 'all' ? 'bg-blue-500' : 'bg-gray-200'
-                          }`}>
-                            <span className="text-xs font-bold text-white">{orders.length}</span>
-                          </div>
-                          <span className={`text-xs font-semibold ${
-                            orderFilter === 'all' ? 'text-blue-700' : 'text-gray-600'
-                          }`}>All Orders</span>
-                        </button>
-
-                        {/* Pending Filter */}
-                        <button
-                          onClick={() => setOrderFilter('pending')}
-                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
-                            orderFilter === 'pending'
-                              ? 'border-orange-500 bg-orange-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                            orderFilter === 'pending' ? 'bg-orange-500' : 'bg-orange-100'
-                          }`}>
-                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'pending').length}</span>
-                          </div>
-                          <span className={`text-xs font-semibold ${
-                            orderFilter === 'pending' ? 'text-orange-700' : 'text-gray-600'
-                          }`}>Pending</span>
-                        </button>
-
-                        {/* In Progress Filter */}
-                        <button
-                          onClick={() => setOrderFilter('in_progress')}
-                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
-                            orderFilter === 'in_progress'
-                              ? 'border-blue-500 bg-blue-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                            orderFilter === 'in_progress' ? 'bg-blue-500' : 'bg-blue-100'
-                          }`}>
-                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'in_progress').length}</span>
-                          </div>
-                          <span className={`text-xs font-semibold ${
-                            orderFilter === 'in_progress' ? 'text-blue-700' : 'text-gray-600'
-                          }`}>In Progress</span>
-                        </button>
-
-                        {/* Ready Filter */}
-                        <button
-                          onClick={() => setOrderFilter('ready')}
-                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
-                            orderFilter === 'ready'
-                              ? 'border-yellow-500 bg-yellow-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                            orderFilter === 'ready' ? 'bg-yellow-500' : 'bg-yellow-100'
-                          }`}>
-                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'ready').length}</span>
-                          </div>
-                          <span className={`text-xs font-semibold ${
-                            orderFilter === 'ready' ? 'text-yellow-700' : 'text-gray-600'
-                          }`}>Ready</span>
-                        </button>
-
-                        {/* Completed Filter */}
-                        <button
-                          onClick={() => setOrderFilter('completed')}
-                          className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 transform hover:scale-105 ${
-                            orderFilter === 'completed'
-                              ? 'border-green-500 bg-green-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                            orderFilter === 'completed' ? 'bg-green-500' : 'bg-green-100'
-                          }`}>
-                            <span className="text-xs font-bold text-white">{orders.filter(o => o.status === 'completed').length}</span>
-                          </div>
-                          <span className={`text-xs font-semibold ${
-                            orderFilter === 'completed' ? 'text-green-700' : 'text-gray-600'
-                          }`}>Completed</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Filter Results Summary */}
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">
-                          Showing <span className="font-semibold text-gray-900">{filteredOrders.length}</span> of{' '}
-                          <span className="font-semibold text-gray-900">{orders.length}</span> orders
-                          {orderFilter !== 'all' && (
-                            <span className="ml-2 text-blue-600">• Filtered by: {orderFilter.replace('_', ' ')}</span>
-                          )}
-                        </span>
-                        {orderFilter !== 'all' && (
-                          <button
-                            onClick={() => setOrderFilter('all')}
-                            className="text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            Clear Filter
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Enhanced Orders Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  {/* Table Header with Filter Info */}
-                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {orderFilter === 'all' ? 'All Orders' : `${orderFilter.replace('_', ' ').toUpperCase()} Orders`}
-                        </h3>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {filteredOrders.length} orders
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-gray-300"
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedFiles(filteredOrders.map(o => o.id));
-                            } else {
-                              setSelectedFiles([]);
-                            }
-                          }}
-                        />
-                        <span className="text-sm text-gray-600">Select All</span>
-                      </div>
-                    </div>
-                  </div>
-
+                {/* Orders Table */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <input 
+                              type="checkbox" 
+                              className="rounded border-gray-300"
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedFiles(orders.map(o => o.id));
+                                } else {
+                                  setSelectedFiles([]);
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
@@ -1032,21 +984,19 @@ const AdminDashboard: React.FC = () => {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {filteredOrders.map((order) => (
-                          <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-200 group">
+                          <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center space-x-3">
-                                <input 
-                                  type="checkbox" 
-                                  className="rounded border-gray-300"
-                                  checked={selectedFiles.includes(order.id)}
-                                  onChange={() => toggleFileSelection(order.id)}
-                                />
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">{order.job_order_number}</div>
-                                  <div className="text-sm text-gray-500 capitalize">{order.delivery_type}</div>
-                                  <div className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()}</div>
-                                </div>
-                              </div>
+                              <input 
+                                type="checkbox" 
+                                className="rounded border-gray-300"
+                                checked={selectedFiles.includes(order.id)}
+                                onChange={() => toggleFileSelection(order.id)}
+                              />
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{order.job_order_number}</div>
+                              <div className="text-sm text-gray-500">{order.delivery_type}</div>
+                              <div className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{order.vip_member?.full_name || 'Unknown'}</div>
@@ -1124,19 +1074,31 @@ const AdminDashboard: React.FC = () => {
                                   <Eye className="h-4 w-4" />
                                 </button>
                                 <button
+                                  onClick={() => {
+                                    const confirmed = window.confirm(`Delete order ${order.job_order_number}? This action cannot be undone.`);
+                                    if (confirmed) {
+                                      deleteOrder(order.id);
+                                      try {
+                                        const stored = localStorage.getItem('cresencio_job_orders');
+                                        const ordersArr = stored ? JSON.parse(stored) : [];
+                                        const updated = ordersArr.filter((o: any) => o.id !== order.id);
+                                        localStorage.setItem('cresencio_job_orders', JSON.stringify(updated));
+                                        window.dispatchEvent(new StorageEvent('storage', { key: 'cresencio_job_orders', newValue: JSON.stringify(updated) }));
+                                      } catch {}
+                                    }
+                                  }}
+                                  className="text-red-600 hover:text-red-800"
+                                  title="Delete Order"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                                <button
                                   onClick={() => downloadAllFilesForOrder(order)}
                                   className="text-green-600 hover:text-green-900 disabled:text-gray-400 disabled:cursor-not-allowed"
                                   title="Download Files"
                                   disabled={!order.files || order.files.length === 0}
                                 >
                                   <FileDown className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirmOrder(order)}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Delete Order"
-                                >
-                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
                             </td>
@@ -1145,32 +1107,6 @@ const AdminDashboard: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
-
-                  {/* Empty State */}
-                  {filteredOrders.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-                        <FileText className="w-8 h-8 text-gray-400" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {orderFilter === 'all' ? 'No orders found' : `No ${orderFilter.replace('_', ' ')} orders`}
-                      </h3>
-                      <p className="text-gray-600 mb-4">
-                        {orderFilter === 'all' 
-                          ? 'There are no job orders in the system yet.'
-                          : `There are currently no orders with "${orderFilter.replace('_', ' ')}" status.`
-                        }
-                      </p>
-                      {orderFilter !== 'all' && (
-                        <button
-                          onClick={() => setOrderFilter('all')}
-                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          View All Orders
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1280,7 +1216,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Member Job History Modal */}
+      {/* Member Details & Job History Modal */}
       {selectedMember && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -1303,7 +1239,7 @@ const AdminDashboard: React.FC = () => {
             <div className="p-6">
               {/* Member Info */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Full Name</label>
                     <p className="text-sm text-gray-900">{selectedMember.full_name}</p>
@@ -1311,10 +1247,6 @@ const AdminDashboard: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">VIP ID</label>
                     <p className="text-sm text-gray-900">{selectedMember.unique_id}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">Address</label>
-                    <p className="text-sm text-gray-900">{selectedMember.address}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -1324,6 +1256,10 @@ const AdminDashboard: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Mobile</label>
                     <p className="text-sm text-gray-900">{selectedMember.mobile_number}</p>
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Address</label>
+                    <p className="text-sm text-gray-900">{selectedMember.address}</p>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Category</label>
                     <p className="text-sm text-gray-900">{selectedMember.customer_category}</p>
@@ -1332,126 +1268,75 @@ const AdminDashboard: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Status</label>
                     <span className={getStatusBadge(selectedMember.status)}>{selectedMember.status}</span>
                   </div>
+                  {selectedMember.school_name && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">School Name</label>
+                      <p className="text-sm text-gray-900">{selectedMember.school_name}</p>
+                    </div>
+                  )}
+                  {selectedMember.senior_id_number && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">Senior ID Number</label>
+                      <p className="text-sm text-gray-900">{selectedMember.senior_id_number}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Uploaded IDs */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <h5 className="text-sm font-semibold text-gray-900 mb-3">Uploaded IDs</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  {selectedMember.student_id_file && (
-                    <div className="p-3 bg-white rounded-lg border">
-                      <label className="block text-gray-700 font-medium mb-2">Student ID</label>
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-blue-600" />
-                        <a 
-                          href={selectedMember.student_id_file} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
-                          title="View Student ID"
-                        >
-                          View Student ID
-                        </a>
-                        <a 
-                          href={selectedMember.student_id_file} 
-                          download
-                          className="text-green-600 hover:text-green-800"
-                          title="Download Student ID"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
+              {(selectedMember.student_id_file || selectedMember.senior_id_file || selectedMember.pwd_id_file || selectedMember.verification_id_file) && (
+                <div className="mb-6">
+                  <h4 className="text-md font-semibold text-gray-900 mb-3">Uploaded IDs</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedMember.student_id_file && (
+                      <div className="p-3 bg-gray-50 rounded border">
+                        <p className="text-sm font-medium mb-2">Student ID</p>
+                        {selectedMember.student_id_file.endsWith('.pdf') ? (
+                          <a href={selectedMember.student_id_file} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm">View PDF</a>
+                        ) : (
+                          <img src={selectedMember.student_id_file} alt="Student ID" className="max-h-48 object-contain rounded" />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  {selectedMember.senior_id_file && (
-                    <div className="p-3 bg-white rounded-lg border">
-                      <label className="block text-gray-700 font-medium mb-2">Senior ID</label>
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-blue-600" />
-                        <a 
-                          href={selectedMember.senior_id_file} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
-                          title="View Senior ID"
-                        >
-                          View Senior ID
-                        </a>
-                        <a 
-                          href={selectedMember.senior_id_file} 
-                          download
-                          className="text-green-600 hover:text-green-800"
-                          title="Download Senior ID"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
+                    )}
+                    {selectedMember.senior_id_file && (
+                      <div className="p-3 bg-gray-50 rounded border">
+                        <p className="text-sm font-medium mb-2">Senior ID</p>
+                        {selectedMember.senior_id_file.endsWith('.pdf') ? (
+                          <a href={selectedMember.senior_id_file} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm">View PDF</a>
+                        ) : (
+                          <img src={selectedMember.senior_id_file} alt="Senior ID" className="max-h-48 object-contain rounded" />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  {selectedMember.pwd_id_file && (
-                    <div className="p-3 bg-white rounded-lg border">
-                      <label className="block text-gray-700 font-medium mb-2">PWD ID</label>
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-blue-600" />
-                        <a 
-                          href={selectedMember.pwd_id_file} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
-                          title="View PWD ID"
-                        >
-                          View PWD ID
-                        </a>
-                        <a 
-                          href={selectedMember.pwd_id_file} 
-                          download
-                          className="text-green-600 hover:text-green-800"
-                          title="Download PWD ID"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
+                    )}
+                    {selectedMember.pwd_id_file && (
+                      <div className="p-3 bg-gray-50 rounded border">
+                        <p className="text-sm font-medium mb-2">PWD ID</p>
+                        {selectedMember.pwd_id_file.endsWith('.pdf') ? (
+                          <a href={selectedMember.pwd_id_file} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm">View PDF</a>
+                        ) : (
+                          <img src={selectedMember.pwd_id_file} alt="PWD ID" className="max-h-48 object-contain rounded" />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  {selectedMember.verification_id_file && (
-                    <div className="p-3 bg-white rounded-lg border">
-                      <label className="block text-gray-700 font-medium mb-2">Verification ID</label>
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-blue-600" />
-                        <a 
-                          href={selectedMember.verification_id_file} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
-                          title="View Verification ID"
-                        >
-                          View Verification ID
-                        </a>
-                        <a 
-                          href={selectedMember.verification_id_file} 
-                          download
-                          className="text-green-600 hover:text-green-800"
-                          title="Download Verification ID"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
+                    )}
+                    {selectedMember.verification_id_file && (
+                      <div className="p-3 bg-gray-50 rounded border">
+                        <p className="text-sm font-medium mb-2">Government ID</p>
+                        {selectedMember.verification_id_file.endsWith('.pdf') ? (
+                          <a href={selectedMember.verification_id_file} target="_blank" rel="noreferrer" className="text-blue-600 underline text-sm">View PDF</a>
+                        ) : (
+                          <img src={selectedMember.verification_id_file} alt="Verification ID" className="max-h-48 object-contain rounded" />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  {!selectedMember.student_id_file && !selectedMember.senior_id_file && !selectedMember.pwd_id_file && !selectedMember.verification_id_file && (
-                    <div className="col-span-full p-4 text-center">
-                      <p className="text-gray-500">No uploaded IDs available.</p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Job Orders */}
               <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-4">Job Orders ({getMemberJobOrders(selectedMember.id).length})</h4>
+                <h4 className="text-md font-semibold text-gray-900 mb-4">Job Orders ({getMemberJobOrders(selectedMember.unique_id).length})</h4>
                 
-                {getMemberJobOrders(selectedMember.id).length > 0 ? (
+                {getMemberJobOrders(selectedMember.unique_id).length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
@@ -1465,7 +1350,7 @@ const AdminDashboard: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {getMemberJobOrders(selectedMember.id).map((order) => (
+                        {getMemberJobOrders(selectedMember.unique_id).map((order) => (
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               {order.job_order_number}
@@ -1518,74 +1403,6 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-sm">This member hasn't submitted any orders yet.</p>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Order Confirmation Modal */}
-      {deleteConfirmOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                Delete Order
-              </h3>
-              <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete order <span className="font-semibold">{deleteConfirmOrder.job_order_number}</span>? 
-                This action cannot be undone.
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setDeleteConfirmOrder(null)}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDeleteOrder(deleteConfirmOrder)}
-                  className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Confirmation Modal */}
-      {showBulkDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                Delete Multiple Orders
-              </h3>
-              <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete <span className="font-semibold">{selectedFiles.length}</span> selected orders? 
-                This action cannot be undone.
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowBulkDeleteConfirm(false)}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBulkDelete}
-                  className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete All
-                </button>
               </div>
             </div>
           </div>

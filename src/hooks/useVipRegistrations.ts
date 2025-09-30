@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { VipMember, MemberStatus } from '../types';
-import { VipAuthService } from '../services/vipAuth';
+import { VipAuthService, deleteVipMemberByUniqueId } from '../services/vipAuth';
 
 export const useVipRegistrations = () => {
   const [registrations, setRegistrations] = useState<VipMember[]>([]);
@@ -29,17 +29,17 @@ export const useVipRegistrations = () => {
   };
 
   // Update member status
-  const updateMemberStatus = async (memberId: number, newStatus: MemberStatus) => {
+  const updateMemberStatus = async (memberUniqueId: string, newStatus: MemberStatus) => {
     try {
       setError(null);
       
-      const result = await VipAuthService.updateMemberStatus(memberId, newStatus);
+      const result = await VipAuthService.updateMemberStatus(memberUniqueId, newStatus);
       
       if (result.success) {
         // Update local state
         setRegistrations(prev => 
           prev.map(member => 
-            member.id === memberId 
+            member.unique_id === memberUniqueId 
               ? { ...member, status: newStatus, updated_at: new Date().toISOString() }
               : member
           )
@@ -54,13 +54,13 @@ export const useVipRegistrations = () => {
   };
 
   // Bulk update member statuses
-  const bulkUpdateMemberStatus = async (memberIds: number[], newStatus: MemberStatus) => {
+  const bulkUpdateMemberStatus = async (memberUniqueIds: string[], newStatus: MemberStatus) => {
     try {
       setError(null);
       
       // Update each member individually
-      const updatePromises = memberIds.map(id => 
-        VipAuthService.updateMemberStatus(id, newStatus)
+      const updatePromises = memberUniqueIds.map(uniqueId => 
+        VipAuthService.updateMemberStatus(uniqueId, newStatus)
       );
       
       const results = await Promise.all(updatePromises);
@@ -72,7 +72,7 @@ export const useVipRegistrations = () => {
         // Update local state
         setRegistrations(prev => 
           prev.map(member => 
-            memberIds.includes(member.id)
+            memberUniqueIds.includes(member.unique_id)
               ? { ...member, status: newStatus, updated_at: new Date().toISOString() }
               : member
           )
@@ -121,6 +121,18 @@ export const useVipRegistrations = () => {
     }
   };
 
+  // Update member by unique id (for attaching uploaded file URLs post-registration)
+  const updateMemberByUniqueId = async (
+    uniqueId: string,
+    updates: Partial<{ student_id_file: string | null; senior_id_file: string | null; pwd_id_file: string | null; verification_id_file: string | null; }>
+  ) => {
+    const result = await VipAuthService.updateMemberByUniqueId(uniqueId, updates);
+    if (result.success) {
+      setRegistrations(prev => prev.map(m => m.unique_id === uniqueId ? { ...m, ...updates, updated_at: new Date().toISOString() } as any : m));
+    }
+    return result;
+  };
+
   // Get registration by ID
   const getRegistrationById = (id: number) => {
     return registrations.find(reg => reg.id === id);
@@ -149,6 +161,17 @@ export const useVipRegistrations = () => {
     loadRegistrations();
   };
 
+  // Delete a registration by unique_id
+  const deleteRegistration = async (uniqueId: string) => {
+    const result = await deleteVipMemberByUniqueId(uniqueId);
+    if (result.success) {
+      setRegistrations(prev => prev.filter(r => r.unique_id !== uniqueId));
+    } else {
+      setError(result.error || 'Failed to delete member');
+    }
+    return result;
+  };
+
   // Load registrations on mount
   useEffect(() => {
     loadRegistrations();
@@ -164,5 +187,7 @@ export const useVipRegistrations = () => {
     getRegistrationById,
     getRegistrationByVipId,
     refreshRegistrations,
+    deleteRegistration,
+    updateMemberByUniqueId,
   };
 };

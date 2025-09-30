@@ -103,34 +103,35 @@ export class VipAuthService {
         throw new Error('Supabase client not initialized. Please check your environment variables.');
       }
 
-      // Generate a unique VIP ID in format VIP-ABC-1234 with collision check
-      const generateVipId = (): string => {
+      // Generate a unique VIP ID (secure, non-sequential: VIP-ABC-1234)
+      const generateCandidate = () => {
         const letters = Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
-        const digits = Math.floor(1000 + Math.random() * 9000).toString();
-        return `VIP-${letters}-${digits}`;
+        const numbers = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+        return `VIP-${letters}-${numbers}`;
       };
 
-      let generatedId: string | null = null;
-      // Try a few times to avoid collisions
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const candidate = generateVipId();
-        const { data: existing, error: checkError } = await supabase
-          .from('vip_accounts')
-          .select('unique_id')
-          .eq('unique_id', candidate)
-          .maybeSingle();
-        if (checkError) {
-          console.warn('VIP ID uniqueness check failed (continuing):', checkError);
+      const ensureUniqueVipId = async (): Promise<string> => {
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const candidate = generateCandidate();
+          const { data, error } = await supabase
+            .from('vip_accounts')
+            .select('unique_id')
+            .eq('unique_id', candidate)
+            .maybeSingle();
+          if (error) {
+            // If error is no rows, proceed; otherwise throw
+            if ((error as any).code && (error as any).code !== 'PGRST116') {
+              throw error;
+            }
+          }
+          if (!data) {
+            return candidate;
+          }
         }
-        if (!existing) {
-          generatedId = candidate;
-          break;
-        }
-      }
+        throw new Error('Failed to generate a unique VIP ID after multiple attempts');
+      };
 
-      if (!generatedId) {
-        throw new Error('Failed to generate a unique VIP ID. Please try again.');
-      }
+      const generatedId = await ensureUniqueVipId();
 
       // Prepare the data for insertion
       const vipAccountData = {
@@ -264,44 +265,50 @@ export class VipAuthService {
   }
 
   /**
+   * Update VIP member fields by unique_id
+   */
+  static async updateMemberByUniqueId(uniqueId: string, updates: Partial<{
+    student_id_file: string | null;
+    senior_id_file: string | null;
+    pwd_id_file: string | null;
+    verification_id_file: string | null;
+    school_name: string | null;
+    senior_id_number: string | null;
+    pwd_id_number: string | null;
+  }>): Promise<{ success: boolean; error?: string }>
+  {
+    try {
+      const { error } = await supabase
+        .from('vip_accounts')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('unique_id', uniqueId);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (err) {
+      console.error('Error updating VIP member:', err);
+      return { success: false, error: 'Failed to update VIP member' };
+    }
+  }
+
+  /**
    * Update VIP member status (for admin use)
    */
   static async updateMemberStatus(
-    memberId: number, 
+    memberUniqueId: string, 
     status: 'pending' | 'approved' | 'rejected'
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Find the member's unique_id based on the mapped numeric id
-      const { data: accounts, error: fetchError } = await supabase
-        .from('vip_accounts')
-        .select('id, unique_id')
-        .order('created_at', { ascending: false });
-
-      if (fetchError || !accounts) {
-        throw new Error('Failed to fetch accounts');
-      }
-
-      // Match by converting UUID -> numeric like we do when mapping
-      const matched = accounts.find((acc: any) => {
-        try {
-          const numeric = parseInt(acc.id.replace(/-/g, '').slice(0, 8), 16);
-          return numeric === memberId;
-        } catch {
-          return false;
-        }
-      });
-
-      if (!matched) {
-        throw new Error('Member not found for status update');
-      }
-
       const { error } = await supabase
         .from('vip_accounts')
         .update({ 
           status,
           updated_at: new Date().toISOString()
         })
-        .eq('unique_id', matched.unique_id);
+        .eq('unique_id', memberUniqueId);
 
       if (error) {
         throw error;
@@ -315,28 +322,6 @@ export class VipAuthService {
         success: false,
         error: 'Failed to update member status.'
       };
-    }
-  }
-
-  /**
-   * Update VIP member status by unique ID (preferred)
-   */
-  static async updateMemberStatusByUniqueId(
-    uniqueId: string,
-    status: 'pending' | 'approved' | 'rejected'
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const { error } = await supabase
-        .from('vip_accounts')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('unique_id', uniqueId);
-
-      if (error) throw error;
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating member status by unique ID:', error);
-      return { success: false, error: 'Failed to update member status.' };
     }
   }
 
@@ -397,5 +382,21 @@ export class VipAuthService {
     } catch (error) {
       return false;
     }
+  }
+}
+
+// New: Delete VIP member by unique_id
+export async function deleteVipMemberByUniqueId(uniqueId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('vip_accounts')
+      .delete()
+      .eq('unique_id', uniqueId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting VIP member:', err);
+    return { success: false, error: err?.message || 'Failed to delete member' };
   }
 }

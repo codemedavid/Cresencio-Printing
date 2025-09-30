@@ -49,9 +49,12 @@ export class VipFileUploadService {
 
       if (error) {
         console.error('Supabase upload error:', error);
+        const friendly = error.message?.includes('Bucket not found')
+          ? `Upload failed: Storage bucket "${this.BUCKET_NAME}" does not exist. Create it in Supabase (Storage → Create bucket) or run the SQL migration to create 'vip-id-files'.`
+          : `Upload failed: ${error.message}`;
         return {
           success: false,
-          error: `Upload failed: ${error.message}`
+          error: friendly
         };
       }
 

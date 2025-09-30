@@ -100,7 +100,7 @@ class ApiService {
     });
   }
 
-  async getJobOrders(vipMemberId: number): Promise<ApiResponse<any[]>> {
+  async getJobOrders(vipMemberId: number | string): Promise<ApiResponse<any[]>> {
     return this.request(`/job-orders/member/${vipMemberId}`);
   }
 

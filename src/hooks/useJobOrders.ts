@@ -64,7 +64,12 @@ export const useJobOrders = () => {
 
       // Create order data for API
       const orderData = {
-        vip_member_id: vipMember.id,
+        vip_unique_id: vipMember.unique_id, // Use unique_id instead of numeric ID
+        vip_name: vipMember.full_name, // Include VIP details for server-side creation
+        vip_address: vipMember.address,
+        vip_email: vipMember.email,
+        vip_mobile: vipMember.mobile_number,
+        vip_category: vipMember.customer_category,
         delivery_type: orderForm.delivery_type,
         pickup_schedule: orderForm.pickup_schedule,
         receiver_name: orderForm.receiver_name,
@@ -145,9 +150,9 @@ export const useJobOrders = () => {
   }, []);
 
   // Load orders from server for a specific member
-  const loadOrdersForMember = useCallback(async (memberId: number) => {
+  const loadOrdersForMember = useCallback(async (memberIdOrUniqueId: number | string) => {
     try {
-      const result = await apiService.getJobOrders(memberId);
+      const result = await apiService.getJobOrders(memberIdOrUniqueId);
       if (result.success && result.data) {
         // Convert server data to JobOrder format
         const serverOrders: JobOrder[] = result.data.map((order: any) => ({

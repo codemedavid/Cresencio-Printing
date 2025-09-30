@@ -232,7 +232,15 @@ const sendEmail = async (to, template) => {
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static('dist'));
+
+// Serve static files only for non-API routes
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    next();
+  } else {
+    express.static('dist')(req, res, next);
+  }
+});
 
 // File upload configuration
 const storage = multer.diskStorage({
@@ -389,6 +397,7 @@ app.post('/api/job-orders', async (req, res) => {
   try {
     const {
       vip_member_id,
+      vip_unique_id,
       delivery_type,
       pickup_schedule,
       receiver_name,
@@ -400,13 +409,52 @@ app.post('/api/job-orders', async (req, res) => {
       files
     } = req.body;
 
+    // Handle VIP member ID - prefer unique_id if provided, otherwise use vip_member_id
+    let finalVipMemberId = vip_member_id;
+    if (vip_unique_id) {
+      // Find VIP member by unique_id
+      let vipMember = vipMembers.find(member => member.unique_id === vip_unique_id);
+      
+      if (!vipMember) {
+        // VIP member doesn't exist in backend, create a placeholder entry
+        console.log(`Creating VIP member entry for unique_id: ${vip_unique_id}`);
+        const newVipMember = {
+          id: nextVipId++,
+          unique_id: vip_unique_id,
+          full_name: req.body.vip_name || 'Unknown User',
+          address: req.body.vip_address || 'Not provided',
+          email: req.body.vip_email || 'Not provided',
+          mobile_number: req.body.vip_mobile || 'Not provided',
+          customer_category: req.body.vip_category || 'Regular Customer',
+          school_name: null,
+          senior_id_number: null,
+          pwd_id_number: null,
+          status: 'approved',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        vipMembers.push(newVipMember);
+        saveData(); // Save to persistent storage
+        vipMember = newVipMember;
+        console.log(`Created VIP member with ID: ${vipMember.id}`);
+      }
+      
+      finalVipMemberId = vipMember.id;
+    } else if (!vip_member_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'VIP member ID or unique ID is required'
+      });
+    }
+
     const job_order_number = `JO-${Date.now().toString().slice(-6)}`;
 
     // Create job order in memory
     const newOrder = {
       id: nextOrderId++,
       job_order_number,
-      vip_member_id: parseInt(vip_member_id),
+      vip_member_id: finalVipMemberId,
       delivery_type,
       pickup_schedule: pickup_schedule || null,
       receiver_name: receiver_name || null,
@@ -460,9 +508,20 @@ app.get('/api/job-orders/member/:memberId', async (req, res) => {
   try {
     const { memberId } = req.params;
     
-    const memberOrders = jobOrders
+    // Try to find by numeric ID first
+    let memberOrders = jobOrders
       .filter(order => order.vip_member_id === parseInt(memberId))
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // If no orders found by numeric ID, try to find by unique_id
+    if (memberOrders.length === 0) {
+      const vipMember = vipMembers.find(member => member.unique_id === memberId);
+      if (vipMember) {
+        memberOrders = jobOrders
+          .filter(order => order.vip_member_id === vipMember.id)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      }
+    }
 
     res.json({
       success: true,

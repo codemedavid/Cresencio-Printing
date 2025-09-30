@@ -31,7 +31,8 @@ const VipProfile: React.FC = () => {
     // Load orders for the current VIP member from server
     const loadOrders = async () => {
       try {
-        const ordersForMember = await loadOrdersForMember(currentVip.id);
+        // Use unique_id instead of numeric ID to ensure compatibility with backend
+        const ordersForMember = await loadOrdersForMember(currentVip.unique_id);
         setAllOrders(ordersForMember);
       } catch (error) {
         console.error('Error loading orders:', error);
@@ -50,7 +51,8 @@ const VipProfile: React.FC = () => {
     
     setRefreshing(true);
     try {
-      const ordersForMember = await loadOrdersForMember(currentVip.id);
+      // Use unique_id instead of numeric ID to ensure compatibility with backend
+      const ordersForMember = await loadOrdersForMember(currentVip.unique_id);
       setAllOrders(ordersForMember);
     } catch (error) {
       console.error('Error refreshing orders:', error);

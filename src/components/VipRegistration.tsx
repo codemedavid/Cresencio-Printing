@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { VipRegistrationForm } from '../types';
 import { useVipRegistrations } from '../hooks/useVipRegistrations';
+import { VipFileUploadService } from '../services/vipFileUpload';
 import Logo from './Logo';
 import { User, Mail, Phone, MapPin, GraduationCap, UserCheck, FileText, Upload, CheckCircle, ArrowRight, X } from 'lucide-react';
 
@@ -140,8 +141,8 @@ const VipRegistration: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Create registration data
-      const registrationData = {
+      // Create registration data with file URLs (we'll upload files first)
+      const registrationData: any = {
         full_name: formData.full_name,
         address: formData.address,
         email: formData.email,
@@ -150,15 +151,52 @@ const VipRegistration: React.FC = () => {
         // Add category-specific fields
         ...(formData.customer_category === 'Student' && { school_name: formData.school_name }),
         ...(formData.customer_category === 'Senior Citizen' && { senior_id_number: formData.senior_id_number }),
-        // Note: In a real app, files would be uploaded to a server
-        // For now, we'll just note that files were uploaded
-        ...(formData.student_id_file && { student_id_file: formData.student_id_file.name }),
-        ...(formData.senior_id_file && { senior_id_file: formData.senior_id_file.name }),
-        ...(formData.pwd_id_file && { pwd_id_file: formData.pwd_id_file.name }),
-        ...(formData.verification_id_file && { verification_id_file: formData.verification_id_file.name }),
       };
       
-      // Add registration to the system using Supabase
+      // Upload files to Supabase Storage first and get URLs
+      const tempUniqueId = `TEMP-${Date.now()}`; // Temporary ID for file organization
+      
+      // Upload student ID file if exists
+      if (formData.student_id_file) {
+        const result = await VipFileUploadService.uploadFile(formData.student_id_file, tempUniqueId, 'student_id');
+        if (result.success && result.url) {
+          registrationData.student_id_file = result.url;
+        } else {
+          throw new Error(result.error || 'Failed to upload student ID file');
+        }
+      }
+
+      // Upload senior ID file if exists
+      if (formData.senior_id_file) {
+        const result = await VipFileUploadService.uploadFile(formData.senior_id_file, tempUniqueId, 'senior_id');
+        if (result.success && result.url) {
+          registrationData.senior_id_file = result.url;
+        } else {
+          throw new Error(result.error || 'Failed to upload senior ID file');
+        }
+      }
+
+      // Upload PWD ID file if exists
+      if (formData.pwd_id_file) {
+        const result = await VipFileUploadService.uploadFile(formData.pwd_id_file, tempUniqueId, 'pwd_id');
+        if (result.success && result.url) {
+          registrationData.pwd_id_file = result.url;
+        } else {
+          throw new Error(result.error || 'Failed to upload PWD ID file');
+        }
+      }
+
+      // Upload verification ID file if exists
+      if (formData.verification_id_file) {
+        const result = await VipFileUploadService.uploadFile(formData.verification_id_file, tempUniqueId, 'verification_id');
+        if (result.success && result.url) {
+          registrationData.verification_id_file = result.url;
+        } else {
+          throw new Error(result.error || 'Failed to upload verification ID file');
+        }
+      }
+      
+      // Create registration in Supabase with file URLs
       const newMember = await addRegistration(registrationData);
       
       // Set the generated ID for display

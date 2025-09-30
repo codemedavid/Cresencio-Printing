@@ -1340,31 +1340,109 @@ const AdminDashboard: React.FC = () => {
                 <h5 className="text-sm font-semibold text-gray-900 mb-3">Uploaded IDs</h5>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   {selectedMember.student_id_file && (
-                    <div>
-                      <label className="block text-gray-700">Student ID</label>
-                      <p className="text-gray-900 break-all">{selectedMember.student_id_file}</p>
+                    <div className="p-3 bg-white rounded-lg border">
+                      <label className="block text-gray-700 font-medium mb-2">Student ID</label>
+                      <div className="flex items-center space-x-2">
+                        <Eye className="w-4 h-4 text-blue-600" />
+                        <a 
+                          href={selectedMember.student_id_file} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
+                          title="View Student ID"
+                        >
+                          View Student ID
+                        </a>
+                        <a 
+                          href={selectedMember.student_id_file} 
+                          download
+                          className="text-green-600 hover:text-green-800"
+                          title="Download Student ID"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                   )}
                   {selectedMember.senior_id_file && (
-                    <div>
-                      <label className="block text-gray-700">Senior ID</label>
-                      <p className="text-gray-900 break-all">{selectedMember.senior_id_file}</p>
+                    <div className="p-3 bg-white rounded-lg border">
+                      <label className="block text-gray-700 font-medium mb-2">Senior ID</label>
+                      <div className="flex items-center space-x-2">
+                        <Eye className="w-4 h-4 text-blue-600" />
+                        <a 
+                          href={selectedMember.senior_id_file} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
+                          title="View Senior ID"
+                        >
+                          View Senior ID
+                        </a>
+                        <a 
+                          href={selectedMember.senior_id_file} 
+                          download
+                          className="text-green-600 hover:text-green-800"
+                          title="Download Senior ID"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                   )}
                   {selectedMember.pwd_id_file && (
-                    <div>
-                      <label className="block text-gray-700">PWD ID</label>
-                      <p className="text-gray-900 break-all">{selectedMember.pwd_id_file}</p>
+                    <div className="p-3 bg-white rounded-lg border">
+                      <label className="block text-gray-700 font-medium mb-2">PWD ID</label>
+                      <div className="flex items-center space-x-2">
+                        <Eye className="w-4 h-4 text-blue-600" />
+                        <a 
+                          href={selectedMember.pwd_id_file} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
+                          title="View PWD ID"
+                        >
+                          View PWD ID
+                        </a>
+                        <a 
+                          href={selectedMember.pwd_id_file} 
+                          download
+                          className="text-green-600 hover:text-green-800"
+                          title="Download PWD ID"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                   )}
                   {selectedMember.verification_id_file && (
-                    <div>
-                      <label className="block text-gray-700">Verification ID</label>
-                      <p className="text-gray-900 break-all">{selectedMember.verification_id_file}</p>
+                    <div className="p-3 bg-white rounded-lg border">
+                      <label className="block text-gray-700 font-medium mb-2">Verification ID</label>
+                      <div className="flex items-center space-x-2">
+                        <Eye className="w-4 h-4 text-blue-600" />
+                        <a 
+                          href={selectedMember.verification_id_file} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline truncate flex-1"
+                          title="View Verification ID"
+                        >
+                          View Verification ID
+                        </a>
+                        <a 
+                          href={selectedMember.verification_id_file} 
+                          download
+                          className="text-green-600 hover:text-green-800"
+                          title="Download Verification ID"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                   )}
                   {!selectedMember.student_id_file && !selectedMember.senior_id_file && !selectedMember.pwd_id_file && !selectedMember.verification_id_file && (
-                    <p className="text-gray-500">No uploaded IDs available.</p>
+                    <div className="col-span-full p-4 text-center">
+                      <p className="text-gray-500">No uploaded IDs available.</p>
+                    </div>
                   )}
                 </div>
               </div>

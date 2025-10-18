@@ -11,6 +11,7 @@ import {
   Clock, UserCheck, BarChart3, Edit, Save, XCircle as XCircleIcon,
   FileDown, Trash2
 } from 'lucide-react';
+import { NotificationService } from '../services/notifications';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +30,9 @@ const AdminDashboard: React.FC = () => {
   const [memberStatusFilter, setMemberStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [memberCategoryFilter, setMemberCategoryFilter] = useState<'all' | 'Student' | 'Senior Citizen' | 'Regular Customer' | 'PWD'>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [lastOrderCount, setLastOrderCount] = useState(0);
+  const [lastRegistrationCount, setLastRegistrationCount] = useState(0);
   
   // Redirect if not authenticated (but wait for loading to complete)
   useEffect(() => {
@@ -38,6 +42,43 @@ const AdminDashboard: React.FC = () => {
       navigate('/admin/login');
     }
   }, [isAuthenticated, isLoading, navigate]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    const initNotifications = async () => {
+      if (NotificationService.isSupported()) {
+        const granted = await NotificationService.requestPermission();
+        setNotificationsEnabled(granted);
+      }
+    };
+    initNotifications();
+  }, []);
+
+  // Notify admin when new orders or registrations arrive
+  useEffect(() => {
+    if (!notificationsEnabled || !isAuthenticated) return;
+
+    // Check for new orders
+    if (orders.length > lastOrderCount && lastOrderCount > 0) {
+      const newOrders = orders.slice(0, orders.length - lastOrderCount);
+      newOrders.forEach(order => {
+        NotificationService.notifyNewOrder(
+          order.job_order_number,
+          order.vip_member?.full_name || 'Unknown Customer'
+        );
+      });
+    }
+    setLastOrderCount(orders.length);
+
+    // Check for new registrations
+    if (registrations.length > lastRegistrationCount && lastRegistrationCount > 0) {
+      const newRegs = registrations.slice(0, registrations.length - lastRegistrationCount);
+      newRegs.forEach(reg => {
+        NotificationService.notifyNewRegistration(reg.unique_id, reg.full_name);
+      });
+    }
+    setLastRegistrationCount(registrations.length);
+  }, [orders.length, registrations.length, notificationsEnabled, isAuthenticated, lastOrderCount, lastRegistrationCount]);
 
 
 
@@ -400,9 +441,27 @@ const AdminDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg">
-                <Bell className="h-5 w-5" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={async () => {
+                    const granted = await NotificationService.requestPermission();
+                    setNotificationsEnabled(granted);
+                    if (granted) {
+                      NotificationService.show('Admin Notifications Enabled', {
+                        body: 'You will now receive alerts for new orders and registrations.',
+                        tag: 'admin-test'
+                      });
+                    }
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg"
+                  title={notificationsEnabled ? 'Notifications enabled' : 'Click to enable notifications'}
+                >
+                  <Bell className="h-5 w-5" />
+                </button>
+                {notificationsEnabled && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+                )}
+              </div>
               <div className="flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">{adminUser?.username}</p>

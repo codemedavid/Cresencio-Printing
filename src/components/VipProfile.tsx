@@ -4,7 +4,8 @@ import { useVip } from '../contexts/VipContext';
 import { useJobOrders } from '../hooks/useJobOrders';
 import { JobOrder } from '../types';
 import Logo from './Logo';
-import { User, LogOut, Plus, FileText, RefreshCcw } from 'lucide-react';
+import { User, LogOut, Plus, FileText, RefreshCcw, Bell } from 'lucide-react';
+import { NotificationService } from '../services/notifications';
 
 const VipProfile: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ const VipProfile: React.FC = () => {
   const [allOrders, setAllOrders] = useState<JobOrder[]>([]);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   useEffect(() => {
     // Run once when dependencies change meaningfully
@@ -28,6 +30,56 @@ const VipProfile: React.FC = () => {
     setAllOrders(ordersForMember);
   }, [currentVip?.id, navigate, getOrdersByMemberId]);
 
+  // Request notification permission on mount
+  useEffect(() => {
+    const initNotifications = async () => {
+      if (NotificationService.isSupported()) {
+        const granted = await NotificationService.requestPermission();
+        setNotificationsEnabled(granted);
+      }
+    };
+    initNotifications();
+  }, []);
+
+  // Watch for order status/amount changes and notify
+  useEffect(() => {
+    if (!currentVip?.id || allOrders.length === 0 || !notificationsEnabled) return;
+
+    const checkForUpdates = () => {
+      const freshOrders = getOrdersByMemberId(currentVip.id);
+      
+      freshOrders.forEach(freshOrder => {
+        const existingOrder = allOrders.find(o => o.id === freshOrder.id);
+        
+        // Notify if status changed
+        if (existingOrder && existingOrder.status !== freshOrder.status) {
+          NotificationService.notifyOrderStatusChange(
+            freshOrder.job_order_number,
+            existingOrder.status,
+            freshOrder.status
+          );
+        }
+        
+        // Notify if amount was set/updated
+        if (existingOrder && 
+            ((!existingOrder.total_amount_to_pay && freshOrder.total_amount_to_pay) ||
+            (existingOrder.total_amount_to_pay !== freshOrder.total_amount_to_pay && freshOrder.total_amount_to_pay))
+        ) {
+          NotificationService.notifyOrderAmountSet(
+            freshOrder.job_order_number,
+            freshOrder.total_amount_to_pay!
+          );
+        }
+      });
+
+      setAllOrders(freshOrders);
+    };
+
+    // Poll every 10 seconds for changes
+    const interval = setInterval(checkForUpdates, 10000);
+    return () => clearInterval(interval);
+  }, [currentVip?.id, allOrders, getOrdersByMemberId, notificationsEnabled]);
+
   const handleRefresh = () => {
     if (!currentVip) return;
     setIsRefreshing(true);
@@ -36,6 +88,20 @@ const VipProfile: React.FC = () => {
     setAllOrders(refreshed);
     // Small delay for UX
     setTimeout(() => setIsRefreshing(false), 300);
+  };
+
+  const handleEnableNotifications = async () => {
+    const granted = await NotificationService.requestPermission();
+    setNotificationsEnabled(granted);
+    if (granted) {
+      // Test notification
+      NotificationService.show('Notifications Enabled!', {
+        body: 'You will now receive updates about your orders.',
+        tag: 'test-notification'
+      });
+    } else {
+      alert('Please enable notifications in your browser settings to receive order updates.');
+    }
   };
 
   // Filter orders based on selected status
@@ -101,6 +167,20 @@ const VipProfile: React.FC = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
+              {notificationsEnabled ? (
+                <span className="text-green-600 text-xs flex items-center gap-1 px-2 py-1 bg-green-50 rounded-full">
+                  <Bell className="w-3 h-3" />
+                  Notifications ON
+                </span>
+              ) : (
+                <button
+                  onClick={handleEnableNotifications}
+                  className="text-gray-600 text-xs flex items-center gap-1 px-2 py-1 hover:bg-gray-100 rounded-full transition"
+                >
+                  <Bell className="w-3 h-3" />
+                  Enable Notifications
+                </button>
+              )}
               <span className="text-gray-600 flex items-center">
                 <User className="w-4 h-4 mr-2" />
                 Welcome, {currentVip.full_name}

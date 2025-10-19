@@ -10,49 +10,83 @@ export class NotificationService {
   static async requestPermission(): Promise<boolean> {
     if (!('Notification' in window)) {
       console.warn('Browser does not support notifications');
+      alert('Your browser does not support desktop notifications.');
       return false;
     }
 
+    console.log('Current notification permission:', Notification.permission);
+
     if (Notification.permission === 'granted') {
       this.hasPermission = true;
+      console.log('Notification permission already granted');
       return true;
     }
 
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      this.hasPermission = permission === 'granted';
-      return this.hasPermission;
+    if (Notification.permission === 'denied') {
+      console.warn('Notification permission denied');
+      alert('Notifications are blocked. Please enable them in your browser settings:\n\nChrome: Settings → Privacy → Site Settings → Notifications\nFirefox: Preferences → Privacy → Permissions → Notifications');
+      return false;
     }
 
-    return false;
+    try {
+      console.log('Requesting notification permission...');
+      const permission = await Notification.requestPermission();
+      console.log('Permission result:', permission);
+      this.hasPermission = permission === 'granted';
+      
+      if (permission === 'denied') {
+        alert('Notification permission was denied. You can change this in your browser settings.');
+      }
+      
+      return this.hasPermission;
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      return false;
+    }
   }
 
   /**
    * Show a notification
    */
   static async show(title: string, options?: NotificationOptions): Promise<void> {
-    // Request permission if not already granted
-    if (!this.hasPermission) {
+    console.log('NotificationService.show called:', title, options);
+    
+    // Check permission status
+    if (Notification.permission !== 'granted') {
+      console.warn('Cannot show notification: permission not granted. Current status:', Notification.permission);
       const granted = await this.requestPermission();
       if (!granted) {
-        console.log('Notification permission denied');
+        console.log('Notification permission denied or not granted');
         return;
       }
     }
 
     try {
+      console.log('Creating notification:', title);
       const notification = new Notification(title, {
         icon: '/logo.jpg',
         badge: '/logo.jpg',
         ...options,
       });
 
-      // Auto-close after 5 seconds
-      setTimeout(() => notification.close(), 5000);
+      console.log('Notification created successfully:', notification);
+
+      // Auto-close after 8 seconds
+      setTimeout(() => {
+        console.log('Auto-closing notification');
+        notification.close();
+      }, 8000);
+
+      // Add click handler to focus the window
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
 
       return;
     } catch (error) {
       console.error('Error showing notification:', error);
+      alert(`Notification error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

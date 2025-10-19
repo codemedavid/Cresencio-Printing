@@ -12,12 +12,15 @@ import {
   FileDown, Trash2
 } from 'lucide-react';
 import { NotificationService } from '../services/notifications';
+import Toast from './Toast';
+import { useToast } from '../hooks/useToast';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, adminUser, logout, isLoading } = useAdminAuth();
   const { orders, updateOrderStatus, updateOrderAmount, deleteOrder } = useJobOrders();
   const { registrations, updateMemberStatus, bulkUpdateMemberStatus, deleteRegistration } = useVipRegistrations();
+  const { toasts, removeToast, success, info } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'registrations' | 'orders'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,9 +65,15 @@ const AdminDashboard: React.FC = () => {
     if (orders.length > lastOrderCount && lastOrderCount > 0) {
       const newOrders = orders.slice(0, orders.length - lastOrderCount);
       newOrders.forEach(order => {
+        // Browser notification
         NotificationService.notifyNewOrder(
           order.job_order_number,
           order.vip_member?.full_name || 'Unknown Customer'
+        );
+        // In-app toast
+        info(
+          'New Order Received',
+          `${order.vip_member?.full_name || 'Customer'} - ${order.job_order_number}`
         );
       });
     }
@@ -74,7 +83,13 @@ const AdminDashboard: React.FC = () => {
     if (registrations.length > lastRegistrationCount && lastRegistrationCount > 0) {
       const newRegs = registrations.slice(0, registrations.length - lastRegistrationCount);
       newRegs.forEach(reg => {
+        // Browser notification
         NotificationService.notifyNewRegistration(reg.unique_id, reg.full_name);
+        // In-app toast
+        success(
+          'New VIP Registration',
+          `${reg.full_name} - ${reg.unique_id}`
+        );
       });
     }
     setLastRegistrationCount(registrations.length);
@@ -1054,8 +1069,18 @@ const AdminDashboard: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-900">{order.job_order_number}</div>
-                              <div className="text-sm text-gray-500">{order.delivery_type}</div>
-                              <div className="text-xs text-gray-400">{new Date(order.created_at).toLocaleDateString()}</div>
+                              <div className="text-sm text-gray-500 capitalize">{order.delivery_type}</div>
+                              {order.pickup_schedule && (
+                                <div className="text-xs text-blue-600 font-medium">
+                                  📅 {new Date(order.pickup_schedule).toLocaleString('en-US', { 
+                                    month: 'short', 
+                                    day: 'numeric', 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })}
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-400">Created: {new Date(order.created_at).toLocaleDateString()}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{order.vip_member?.full_name || 'Unknown'}</div>
@@ -1212,8 +1237,41 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Delivery Type</label>
-                  <p className="text-sm text-gray-900">{selectedOrder.delivery_type}</p>
+                  <p className="text-sm text-gray-900 capitalize">{selectedOrder.delivery_type}</p>
                 </div>
+                {selectedOrder.pickup_schedule && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Pickup Schedule</label>
+                    <p className="text-sm text-gray-900">
+                      {new Date(selectedOrder.pickup_schedule).toLocaleString('en-US', {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                )}
+                {selectedOrder.receiver_name && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Receiver Name</label>
+                    <p className="text-sm text-gray-900">{selectedOrder.receiver_name}</p>
+                  </div>
+                )}
+                {selectedOrder.receiver_address && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Delivery Address</label>
+                    <p className="text-sm text-gray-900">{selectedOrder.receiver_address}</p>
+                  </div>
+                )}
+                {selectedOrder.receiver_mobile && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Receiver Mobile</label>
+                    <p className="text-sm text-gray-900">{selectedOrder.receiver_mobile}</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Total Amount to Pay</label>
                   <p className="text-lg font-bold text-green-600">₱{selectedOrder.total_amount_to_pay?.toFixed(2) || '0.00'}</p>
@@ -1467,6 +1525,21 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Toast Notifications Container */}
+      <div className="fixed bottom-4 right-4 z-50">
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            id={toast.id}
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            duration={toast.duration}
+            onClose={removeToast}
+          />
+        ))}
+      </div>
     </div>
   );
 };

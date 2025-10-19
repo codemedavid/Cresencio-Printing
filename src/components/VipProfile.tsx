@@ -6,11 +6,14 @@ import { JobOrder } from '../types';
 import Logo from './Logo';
 import { User, LogOut, Plus, FileText, RefreshCcw, Bell } from 'lucide-react';
 import { NotificationService } from '../services/notifications';
+import Toast from './Toast';
+import { useToast } from '../hooks/useToast';
 
 const VipProfile: React.FC = () => {
   const navigate = useNavigate();
   const { currentVip, logout } = useVip();
   const { getOrdersByMemberId, loading } = useJobOrders();
+  const { toasts, removeToast, success, info } = useToast();
   const [allOrders, setAllOrders] = useState<JobOrder[]>([]);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'in_progress' | 'ready' | 'completed'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -53,10 +56,16 @@ const VipProfile: React.FC = () => {
         
         // Notify if status changed
         if (existingOrder && existingOrder.status !== freshOrder.status) {
+          // Browser notification
           NotificationService.notifyOrderStatusChange(
             freshOrder.job_order_number,
             existingOrder.status,
             freshOrder.status
+          );
+          // In-app toast (always visible)
+          info(
+            `Order ${freshOrder.job_order_number} Updated`,
+            `Status: ${existingOrder.status} → ${freshOrder.status}`
           );
         }
         
@@ -65,9 +74,15 @@ const VipProfile: React.FC = () => {
             ((!existingOrder.total_amount_to_pay && freshOrder.total_amount_to_pay) ||
             (existingOrder.total_amount_to_pay !== freshOrder.total_amount_to_pay && freshOrder.total_amount_to_pay))
         ) {
+          // Browser notification
           NotificationService.notifyOrderAmountSet(
             freshOrder.job_order_number,
             freshOrder.total_amount_to_pay!
+          );
+          // In-app toast
+          success(
+            `Order ${freshOrder.job_order_number}`,
+            `Total amount: ₱${freshOrder.total_amount_to_pay!.toFixed(2)}`
           );
         }
       });
@@ -91,14 +106,18 @@ const VipProfile: React.FC = () => {
   };
 
   const handleEnableNotifications = async () => {
+    console.log('handleEnableNotifications called');
     const granted = await NotificationService.requestPermission();
+    console.log('Permission granted:', granted);
     setNotificationsEnabled(granted);
     if (granted) {
+      console.log('Attempting to show test notification...');
       // Test notification
-      NotificationService.show('Notifications Enabled!', {
+      await NotificationService.show('Notifications Enabled!', {
         body: 'You will now receive updates about your orders.',
         tag: 'test-notification'
       });
+      console.log('Test notification call completed');
     } else {
       alert('Please enable notifications in your browser settings to receive order updates.');
     }
@@ -167,20 +186,6 @@ const VipProfile: React.FC = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
-              {notificationsEnabled ? (
-                <span className="text-green-600 text-xs flex items-center gap-1 px-2 py-1 bg-green-50 rounded-full">
-                  <Bell className="w-3 h-3" />
-                  Notifications ON
-                </span>
-              ) : (
-                <button
-                  onClick={handleEnableNotifications}
-                  className="text-gray-600 text-xs flex items-center gap-1 px-2 py-1 hover:bg-gray-100 rounded-full transition"
-                >
-                  <Bell className="w-3 h-3" />
-                  Enable Notifications
-                </button>
-              )}
               <span className="text-gray-600 flex items-center">
                 <User className="w-4 h-4 mr-2" />
                 Welcome, {currentVip.full_name}
@@ -215,7 +220,7 @@ const VipProfile: React.FC = () => {
               {currentVip.status.toUpperCase()}
             </span>
           </div>
-
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 pt-0">
             <div className="rounded-xl border p-5 bg-[#EEF4FF] border-[#D6E4FF]">
               <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
@@ -243,7 +248,7 @@ const VipProfile: React.FC = () => {
                 </div>
               </div>
             </div>
-
+            
             <div className="rounded-xl border p-5 bg-[#E9FBF0] border-[#BDE5C8]">
               <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
                 <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white" style={{backgroundColor: '#16A34A'}}>
@@ -396,6 +401,21 @@ const VipProfile: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Toast Notifications Container */}
+      <div className="fixed bottom-4 right-4 z-50">
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            id={toast.id}
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            duration={toast.duration}
+            onClose={removeToast}
+          />
+        ))}
       </div>
     </div>
   );
